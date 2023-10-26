@@ -275,15 +275,14 @@ if __name__ == '__main__':
     # Specify domain names in list
     domains_list = ['space_movement', 'agent_objective', 'social_connectivity', 'emotion_expression', 'linguistic_predictiveness']
 
-    sparmat = domains_sparsity(domains_list, data_path)
-    plot_sparsity(sparmat, domains_list, out_path)
-
+    # Get R2 and RV
     R2 = domains_collinearity(domains_list, data_path)
     RV = domains_collinearity(domains_list, data_path, measure='rv')
     
+    # Get sparcity for each domain and each run
+    sparmat = domains_sparsity(domains_list, data_path)
+    
+    # Plot
     plot_canoncorr(R2, domains_list, out_path)
     plot_canoncorr(RV, domains_list, out_path, filename='RV', cbar_lab= 'RV')
-
-    
-
-    print('d')
+    plot_sparsity(sparmat, domains_list, out_path)
