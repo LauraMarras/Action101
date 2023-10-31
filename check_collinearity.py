@@ -1,13 +1,18 @@
+import os
+os.environ['OPENBLAS_NUM_THREADS'] = '1'
+os.environ['MKL_NUM_THREADS'] = '1'
+os.environ['OMP_NUM_THREADS'] = '1'
+os.environ['BLIS_NUM_THREADS'] = '1'
+
 import numpy as np
 import pandas as pd
 from scipy import stats
-from sklearn.cross_decomposition import CCA
 from itertools import product
 from matplotlib import pyplot as plt
 import seaborn as sns
-import os
+from sklearn.cross_decomposition import CCA
 
-def canoncorrelation(X,Y, center=True):
+def canoncorrelation(X,Y, center=True, adjust=True):
     
     """
     Performs canonical correlation analysis using sklearn.cross_decomposition CCA package
@@ -16,16 +21,17 @@ def canoncorrelation(X,Y, center=True):
     - X : matrix of shape n by d1
     - Y : matrix of shape n by d2
     - center: default = True; whether to remove the mean (columnwise) from each column of X and Y
+    - adjust: default = True; whether to correct for number of predictor columns
 
     Outputs:
-    - r2 : R-squared (Y*B = V)
+    - r2 : R-squared (Y*B = V), if adjusted = True, adjusted
     - A : Sample canonical coefficients for X variables
     - B : Sample canonical coefficients for Y variables
     - r : Sample canonical correlations
     - U : canonical scores for X
     - V : canonical scores for Y
     """
-    
+
     # Center X and Y
     if center:
         X = X - np.mean(X, axis=0)
@@ -33,6 +39,7 @@ def canoncorrelation(X,Y, center=True):
 
     # Canonical Correlation Analysis
     n_components = np.min([X.shape[1], Y.shape[1]]) # Define n_components as the min rank
+
     cca = CCA(n_components=n_components, scale=True)
     cca.fit(X, Y)
     U, V = cca.transform(X, Y)
@@ -62,9 +69,15 @@ def canoncorrelation(X,Y, center=True):
     SSres = np.sum((Y.ravel() - Y_pred.ravel()) ** 2)
     SStot = np.sum((Y.ravel() - np.mean(Y.ravel())) ** 2)
     r2 = 1 - (SSres / SStot)
-    
-    return r2, A, B, R, U, V
 
+    # Adjust by number of X columns
+    n = Y_pred.shape[0]
+    p = Y_pred.shape[1]
+    if adjust:
+        r2 = 1 - (1-r2)*((n-1)/(n-p-1))
+
+    return r2, A, B, R, U, V
+    
 def rv_coeff(X,Y, center=True, zscore=False):
     
     """
@@ -115,7 +128,7 @@ def domains_collinearity(domains, path, measure='R2'):
     Outputs:
     - r_mat : Results matrix of shape =  n_domains by n_domains with X on the columns and Y on the rows
     """
-
+   
     # Create domains dictionary
     domains_dict = {d: pd.read_csv(path + '{}.csv'.format(d)).to_numpy() for d in domains}
     
@@ -131,12 +144,12 @@ def domains_collinearity(domains, path, measure='R2'):
             r_mat[c] = canoncorrelation(X, Y)[0]
         elif measure == 'RV' or measure == 'rv':
             r_mat[c] = rv_coeff(X, Y)
-
+            
     r_mat = r_mat.reshape(5,5).T # Reshape into a n_domain by n_domain matrix
+    
     return r_mat
 
 def plot_canoncorr(R, labels, out_path=False, filename='R2', cbar_lab='R2'):
-    
     """
     Plots results with a heatmap
 
@@ -265,7 +278,7 @@ def plot_sparsity(R, labels, out_path=False, filename='Sparsity'):
 
 
 if __name__ == '__main__':
-
+    
     # Set data_path as the path where the csv files containing single domain matrices are saved, including first part of filename, up to the domain specification (here I specify 'tagging_carica101_group_2su3_convolved_' for example)
     data_path = 'C:/Users/laura/OneDrive/Documenti/PhD/ProgettoLorenzo/Data_Code/Data/Carica101_Models/Domains/tagging_carica101_group_2su3_convolved_'
     
@@ -276,13 +289,15 @@ if __name__ == '__main__':
     domains_list = ['space_movement', 'agent_objective', 'social_connectivity', 'emotion_expression', 'linguistic_predictiveness']
 
     # Get R2 and RV
+    
     R2 = domains_collinearity(domains_list, data_path)
     RV = domains_collinearity(domains_list, data_path, measure='rv')
     
     # Get sparcity for each domain and each run
     sparmat = domains_sparsity(domains_list, data_path)
-    
+
     # Plot
-    plot_canoncorr(R2, domains_list, out_path)
-    plot_canoncorr(RV, domains_list, out_path, filename='RV', cbar_lab= 'RV')
-    plot_sparsity(sparmat, domains_list, out_path)
+    plot_canoncorr(R2, domains_list, out_path, filename='R2_profilingtrial')
+    plot_canoncorr(RV, domains_list, out_path, filename='RV_profilingtrial', cbar_lab= 'RV')
+    plot_sparsity(sparmat, domains_list, out_path, filename= 'sparsity_profilingtrial')
+    
