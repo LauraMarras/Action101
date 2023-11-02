@@ -34,7 +34,7 @@ def permutation_schema(n_tpoints, n_perms=1000, chunk_size=15, seed=0):
 
     # Shuffle the order of the chunks separately for each permutation
     for i in range(1,n_perms+1):
-        perm_schema[:,i] = np.concatenate(np.random.permutation(chunks))
+        perm_schema[:,i] = np.concatenate([list(chunks[c]) for c in np.random.permutation(len(chunks))])
         
     # Assign original indices to first column of permutation schema
     perm_schema[:,0] = indices
