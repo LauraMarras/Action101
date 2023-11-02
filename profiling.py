@@ -11,6 +11,8 @@ if __name__ == '__main__':
     import numpy as np
     import time
     import multiprocessing as mp
+    
+    t = time.time()
 
     # Set parameters
     n_rois = 10#400
@@ -36,22 +38,35 @@ if __name__ == '__main__':
     # Generate permutation schema
     perm_schema = permutation_schema(n_tpoints, n_perms=n_perms)
 
-    # Get R2 for each roi, permutation and domain
-    #### With pool
+    # Initialize results matrix
+    results = np.full((n_rois, n_perms+1, len(domains)), np.nan)
+
+    #### Get R2 With pool
     t1 = time.time()
 
     with mp.Pool(mp.cpu_count()) as pool:
+        t2 = time.time() - t1
+        
         results = np.array([pool.apply(run_canoncorr, args=(roi, data, perm_schema, domains)) for roi in range(n_rois)])
-
-    print(time.time() - t1)
-
+        
+        t3  = time.time() - t1
+        
+        for roi in range(n_rois):
+            results[roi, :, :] = run_canoncorr(roi, data, perm_schema, domains)
+        
+        t4 = time.time() - t1
+    
     #### Without pool
-    t2 = time.time()
-
-    # Initialize results matrix
-    results2 = np.full((n_rois, n_perms+1, len(domains)), np.nan)
+    t5 = time.time() - t1
 
     for roi in range(n_rois):
-        results2[roi, :, :] = run_canoncorr(roi, data, perm_schema, domains)
+            results[roi, :, :] = run_canoncorr(roi, data, perm_schema, domains)
+    
+    t6 = time.time() - t1
 
-    print(time.time() - t2)
+    print('time before pool  ', t1 - t)
+    print('time to call pool  ', t2)
+    print('time to run with pool.apply  ', t3 - t2)
+    print('time to run with pool for loop  ', t4 - t3)
+    print('time to finish pool  ', t5 - t4)
+    print('time to run without for loop  ', t6 - t5)
