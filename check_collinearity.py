@@ -40,7 +40,7 @@ def canoncorrelation(X,Y, center=True, adjust=True):
     # Canonical Correlation Analysis
     n_components = np.min([X.shape[1], Y.shape[1]]) # Define n_components as the min rank
 
-    cca = CCA(n_components=n_components, scale=True)
+    cca = CCA(n_components=n_components, scale=True, max_iter=5000)
     cca.fit(X, Y)
     U, V = cca.transform(X, Y)
 
