@@ -48,13 +48,12 @@ def permutation_schema(n_tpoints, n_perms=1000, chunk_size=15, seed=0, flip=True
 
     return perm_schema
 
-def run_canoncorr(roi, data, perm_schema, domains, adjust=True):
+def run_canoncorr(roi, perm_schema, domains, adjust=True):
     """
     Run canonical correlation and store R2 between fMRI activity of a ROI and each domain model, first using real data and then permuted fMRI data
     
     Inputs:
-    - roi : number of ROI (index of roi in data matrix) # to be changed to name of dictionary key?
-    - data : matrix containing fMRI data of shape = n_tpoints by n_voxels by n_rois # to be changed to dictionary containing rois as keys and matrix of shape n_tpoints by n_voxels as values
+    - roi : matrix containing fMRI data of shape = n_tpoints by n_voxels
     - perm_schema : matrix of shape = n_tpoints, n_perms; first row contains unshuffled indices --> contains indices for each permutation
     - domains : dictionary containing domains as keys and matrix of shape n_tpoints by n_columns as values
     - adjust : whether to get adjusted R2 or not, default = True
@@ -65,18 +64,16 @@ def run_canoncorr(roi, data, perm_schema, domains, adjust=True):
     n_perms = perm_schema.shape[1]
     n_domains = len(domains)
     
-    data_roi = data[roi] # get fmri data of specific roi --> shape = n_tpoints by n_voxels
-
     # Initialize results matrix
     results = np.full((n_perms, n_domains), np.nan)
     
     for perm in range(n_perms):
         order = perm_schema[:,perm] # shape = n_tpoints --> indices
-        Y = data_roi[order,:] # reorder fmri signal based on permutation schema
+        Y = roi[order,:] # reorder fmri signal based on permutation schema
         
         for d, domain in enumerate(domains.values()):
             X = domain # shape = n_tpoints by n_columns
-            results[perm, d] = canoncorrelation(X, Y)[0]
+            results[perm, d] = canoncorrelation(X, Y, adjust=adjust)[0]
 
     return results
 
