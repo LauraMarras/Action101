@@ -49,6 +49,7 @@ def permutation_schema(n_tpoints, n_perms=1000, chunk_size=15, seed=0, flip=True
     return perm_schema
 
 def run_canoncorr(roi, perm_schema, domains, adjust=True):
+    
     """
     Run canonical correlation and store R2 between fMRI activity of a ROI and each domain model, first using real data and then permuted fMRI data
     
@@ -77,17 +78,55 @@ def run_canoncorr(roi, perm_schema, domains, adjust=True):
 
     return results
 
+def gen_correlated_data(realdata, n_voxels=100, noise=1):
+    
+    """
+    Generates fake data starting from real data
+    
+    Inputs:
+    - realdata : real data to be used as base for generated data
+    - n_voxels : number of voxels of data to be generated; default = 100
+    - noise : noise coefficient; default = 1
 
-def generate_signal(t_points=1614, tr=2, n_voxels=100):
+    Outputs:
+    - fakedata : matrix of shape = n_tpoints, n_voxels
+    """
+    # Get number of timepoints and columns
+    columns = realdata.shape[1]
+    tpoints = realdata.shape[0]
 
+    # Initialize matrix for fake data (shape = tpoints by n_voxels)
+    fakedata = np.full((tpoints, n_voxels), np.nan)
+    
+    # Generate fake signal for each voxel
+    for voxel in range(n_voxels):
+        beta = np.random.randn(columns) # generate random beta coefficients, one for each column
+        fakedata[:, voxel] = np.dot(realdata, beta) + noise*np.random.randn(tpoints) # multiply real data by betacoefficients and add noise (regulated by coefficient)
+    
+    return fakedata
+
+def gen_fmri_signal(t_points=1614, tr=2, n_voxels=100):
+    
+    """
+    Generates fake fmri data
+    
+    Inputs:
+    - t_points : number of timepoints; default = 1614
+    - tr : TR of fMRI signal (time resolution) in seconds; default = 2
+    - n_voxels : number of voxels of data to be generated; default = 100
+
+    Outputs:
+    - fakedata : matrix of shape = n_tpoints, n_voxels
+    """
     # Create an empty array to store the fMRI data for the set of voxels
-    fmri_data = np.random.rand(t_points, n_voxels)
+    fakedata = np.random.rand(t_points, n_voxels)
+    
+    # Generate time array
+    t = np.arange(t_points)
 
     # Simulate the fMRI signals for each voxel
     for voxel in range(n_voxels):
         phase_shift = np.random.randn() * np.pi * voxel / n_voxels
-        for t in range(1, t_points):
-            # For a simple example, let's use a sine wave for each voxel.
-            fmri_data[t, voxel] = np.sin(2 * np.pi * t / (tr * 30)+ phase_shift) + 0.5 * np.random.randn()
-
-    return fmri_data
+        fakedata[:, voxel] = np.sin(2 * np.pi * t / (tr * 30)+ phase_shift) + 0.5 * np.random.randn()
+        
+    return fakedata
