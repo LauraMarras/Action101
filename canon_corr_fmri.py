@@ -7,7 +7,8 @@ os.environ['BLIS_NUM_THREADS'] = '1'
 from check_collinearity import canoncorrelation
 import numpy as np
 
-def permutation_schema(n_tpoints, n_perms=1000, chunk_size=15, seed=0):
+def permutation_schema(n_tpoints, n_perms=1000, chunk_size=15, seed=0, flip=True):
+    
     """
     Creates an index permutation schema
     
@@ -16,6 +17,7 @@ def permutation_schema(n_tpoints, n_perms=1000, chunk_size=15, seed=0):
     - n_perms : number of permutations (columns); default = 1000
     - chunk_size: size of chunks to be kept contiguous, in TR; default = 15 (30s)
     - seed: seed for the random permutation; default = 0
+    - flip: decide wether to flip or not random number of chunks, default = True
 
     Outputs:
     - perm_schema : matrix of shape = n_tpoints, n_perms + 1; first row contains unshuffled indices
@@ -31,6 +33,11 @@ def permutation_schema(n_tpoints, n_perms=1000, chunk_size=15, seed=0):
 
     # Create chunks of contiguous timepoints
     chunks = [indices[i:i + chunk_size] for i in range(0, n_tpoints, chunk_size)]
+
+    # Flip some of the chunks
+    if flip:
+        flip_inds = np.random.choice([0, 1], size=len(chunks))
+        chunks = [np.flip(chunk) if flip_inds[c] == 1 else chunk for c, chunk in enumerate(chunks)]
 
     # Shuffle the order of the chunks separately for each permutation
     for i in range(1,n_perms+1):
@@ -70,7 +77,8 @@ def run_canoncorr(roi, data, perm_schema, domains):
             X = domain # shape = n_tpoints by n_columns
             results[perm, d] = canoncorrelation(X, Y)[0]
 
-    return results
+    return results, roi
+
 
 def generate_signal(t_points=1614, tr=2, n_voxels=100):
 
