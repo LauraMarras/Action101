@@ -48,7 +48,7 @@ def permutation_schema(n_tpoints, n_perms=1000, chunk_size=15, seed=0, flip=True
 
     return perm_schema
 
-def run_canoncorr(roi, data, perm_schema, domains):
+def run_canoncorr(roi, data, perm_schema, domains, adjust=True):
     """
     Run canonical correlation and store R2 between fMRI activity of a ROI and each domain model, first using real data and then permuted fMRI data
     
@@ -57,7 +57,8 @@ def run_canoncorr(roi, data, perm_schema, domains):
     - data : matrix containing fMRI data of shape = n_tpoints by n_voxels by n_rois # to be changed to dictionary containing rois as keys and matrix of shape n_tpoints by n_voxels as values
     - perm_schema : matrix of shape = n_tpoints, n_perms; first row contains unshuffled indices --> contains indices for each permutation
     - domains : dictionary containing domains as keys and matrix of shape n_tpoints by n_columns as values
-
+    - adjust : whether to get adjusted R2 or not, default = True
+    
     Outputs:
     - results : matrix of shape = n_perms, n_domains; containing R2 values for each permutation and each domain
     """
@@ -77,7 +78,7 @@ def run_canoncorr(roi, data, perm_schema, domains):
             X = domain # shape = n_tpoints by n_columns
             results[perm, d] = canoncorrelation(X, Y)[0]
 
-    return results, roi
+    return results
 
 
 def generate_signal(t_points=1614, tr=2, n_voxels=100):
