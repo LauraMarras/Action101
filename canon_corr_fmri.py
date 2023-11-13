@@ -4,8 +4,74 @@ os.environ['MKL_NUM_THREADS'] = '1'
 os.environ['OMP_NUM_THREADS'] = '1'
 os.environ['BLIS_NUM_THREADS'] = '1'
 
-from check_collinearity import canoncorrelation
+from sklearn.cross_decomposition import CCA
 import numpy as np
+
+def canoncorrelation(X,Y, center=True, adjust=True):
+    
+    """
+    Performs canonical correlation analysis using sklearn.cross_decomposition CCA package
+    
+    Inputs:
+    - X : matrix of shape n by d1
+    - Y : matrix of shape n by d2
+    - center: default = True; whether to remove the mean (columnwise) from each column of X and Y
+    - adjust: default = True; whether to correct for number of predictor columns
+
+    Outputs:
+    - r2 : R-squared (Y*B = V), if adjusted = True, adjusted
+    - A : Sample canonical coefficients for X variables
+    - B : Sample canonical coefficients for Y variables
+    - r : Sample canonical correlations
+    - U : canonical scores for X
+    - V : canonical scores for Y
+    """
+
+    # Center X and Y
+    if center:
+        X = X - np.mean(X, axis=0)
+        Y = Y - np.mean(Y, axis=0)
+
+    # Canonical Correlation Analysis
+    n_components = np.min([X.shape[1], Y.shape[1]]) # Define n_components as the min rank
+
+    cca = CCA(n_components=n_components, scale=True, max_iter=5000)
+    cca.fit(X, Y)
+    U, V = cca.transform(X, Y)
+
+    # Get A and B matrices as done by Matlab canoncorr()
+    A = np.linalg.lstsq(X, U, rcond=None)[0]
+    B = np.linalg.lstsq(Y, V, rcond=None)[0]
+
+    # Calculate R for each canonical variate
+    R = np.full(U.shape[1], np.nan)
+    for c in range(U.shape[1]):
+        x = U[:,c]
+        y = V[:,c]
+        r = np.corrcoef(x,y, rowvar=False)[0,1]
+        R[c] = r
+
+    # Calculate regression coefficients b_coeffs
+    b_coeffs = np.linalg.lstsq(U, V, rcond=None)[0]
+
+    # Predict V using U and b_coeffs
+    V_pred = np.dot(U, b_coeffs)
+
+    # Calculate centered predicted Y
+    Y_pred = np.dot(V_pred, np.linalg.pinv(B))
+
+    # Calculate R-squared
+    SSres = np.sum((Y.ravel() - Y_pred.ravel()) ** 2)
+    SStot = np.sum((Y.ravel() - np.mean(Y.ravel())) ** 2)
+    r2 = 1 - (SSres / SStot)
+
+    # Adjust by number of X columns
+    n = Y_pred.shape[0]
+    p = Y_pred.shape[1]
+    if adjust:
+        r2 = 1 - (1-r2)*((n-1)/(n-p-1))
+
+    return r2, A, B, R, U, V
 
 def permutation_schema(n_tpoints, n_perms=1000, chunk_size=15, seed=0, flip=True):
     
