@@ -15,7 +15,7 @@ if __name__ == '__main__':
     t = time.time()
 
     # Set parameters
-    n_rois = 10 #400
+    n_rois = 30 #400
     n_voxels = 100
     n_perms = 500 #1000
     n_tpoints = 1614
@@ -34,7 +34,7 @@ if __name__ == '__main__':
     domains = {d: np.loadtxt(data_path + '{}.csv'.format(d), delimiter=',', skiprows=1)[:, 1:] for d in domains_list}
 
     # Generate fake correlated data starting from domain
-    data = {r: gen_correlated_data(domains['space_movement'], n_voxels, noise=0.1) for r in range(n_rois)}
+    data = {r: gen_correlated_data(domains['space_movement'], n_voxels, noise=2) for r in range(n_rois)}
 
     # Generate fake simulated data (simple oscillations)
     #data = {r: gen_fmri_signal() for r in range(n_rois)}
@@ -49,18 +49,20 @@ if __name__ == '__main__':
     t1 = time.time()
     results_pool = []
 
-    pool = mp.Pool(4)
+    pool = mp.Pool(15)
 
     for r, roi in data.items():
         result_pool = pool.apply_async(run_canoncorr, args=(roi, perm_schema, domains, True))
         results_pool.append(result_pool)
     
     pool.close()
-    
+        
 
     for result_pool in results_pool:
         njob = result_pool._job
         result_matrix[njob, :, :] = result_pool.get()
-        
+            
+    np.save('results_n2', result_matrix)
     
+    print(time.time() - t1)
     print('d')
