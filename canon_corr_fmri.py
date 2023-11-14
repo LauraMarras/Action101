@@ -196,3 +196,8 @@ def gen_fmri_signal(t_points=1614, tr=2, n_voxels=100):
         fakedata[:, voxel] = np.sin(2 * np.pi * t / (tr * 30)+ phase_shift) + 0.5 * np.random.randn()
         
     return fakedata
+
+
+# function to get pvalue based on sorting ascending, position (1-(pos-1/totperms+1))
+#ottengo pvalue X roi Xdominio
+
