@@ -144,6 +144,36 @@ def run_canoncorr(roi, perm_schema, domains, adjust=True):
 
     return results
 
+def pvals(results):
+    
+    """
+    Get p value for each domain
+    
+    Inputs:
+    - results : matrix of shape = n_perms, n_domains; containing R2 values for each permutation and each domain
+    
+    Outputs:
+    - pvalues : array of shape = n_domains
+    """
+    
+    # Define number of domains and permutations
+    n_domains = results.shape[1]
+    n_perms = results.shape[0]-1
+    
+    # Get true R
+    r_true = results[0,:]
+
+    # Sort permuted results
+    res_sorted = np.sort(results, axis=0)
+
+    # Get position of true result in sorted matrix for each domain
+    positions = np.array([np.where(np.isclose(res_sorted[:,d], r_true[d]))[0][0] for d in range(n_domains)])
+
+    # Calculate pval based on position
+    pvals = 1-((positions)/(n_perms+1))
+
+    return pvals
+
 def gen_correlated_data(realdata, n_voxels=100, noise=1):
     
     """
@@ -196,8 +226,3 @@ def gen_fmri_signal(t_points=1614, tr=2, n_voxels=100):
         fakedata[:, voxel] = np.sin(2 * np.pi * t / (tr * 30)+ phase_shift) + 0.5 * np.random.randn()
         
     return fakedata
-
-
-# function to get pvalue based on sorting ascending, position (1-(pos-1/totperms+1))
-#ottengo pvalue X roi Xdominio
-
