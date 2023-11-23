@@ -1,90 +1,78 @@
 import pandas as pd
 import numpy as np
 
-# Set to display all columns
-pd.set_option('display.max_columns', None)
 
-# Load Excel files
-data_path = 'C:/Users/laura/OneDrive/Documenti/PhD/ProgettoLorenzo/Data_Code/Data/Carica101_RawTagging/tagging_carica101_'
-out_path = 'C:/Users/laura/OneDrive/Documenti/PhD/ProgettoLorenzo/Data_Code/Data/Carica101_PreprocessedTagging/tagging_carica101_'
+if __name__ == '__main__':
 
-## Laura
-ex_laura = pd.read_excel(data_path + 'Laura.xlsx', sheet_name=None)
-df_laura = pd.DataFrame()
-for sheet in ex_laura: # Extract each excel sheet and concatenate to main dataframe
-    df_laura = pd.concat([df_laura, ex_laura[sheet]], axis=0)
+    # Load Excel files
+    data_path = 'Data/Carica101_RawTagging/tagging_carica101_'
+    out_path = 'Data/Carica101_PreprocessedTagging/tagging_carica101_'
+ 
+    ## Laura
+    ex_LM = pd.read_excel(data_path + 'LM.xlsx', sheet_name=None)
+    df_LM = pd.DataFrame()
+    for sheet in ex_LM: # Extract each excel sheet and concatenate to main dataframe
+        df_LM = pd.concat([df_LM, ex_LM[sheet]], axis=0)
 
-## Alessandro    
-ex_ale = pd.read_excel(data_path + 'Alessandro.xlsx', sheet_name=None)
-df_ale = pd.DataFrame()
-for sheet in ex_ale: # Extract each excel sheet and concatenate to main dataframe
-    df_ale = pd.concat([df_ale, ex_ale[sheet]], axis=0)
+    ## Alessandro    
+    ex_AI = pd.read_excel(data_path + 'AI.xlsx', sheet_name=None)
+    df_AI = pd.DataFrame()
+    for sheet in ex_AI: # Extract each excel sheet and concatenate to main dataframe
+        df_AI = pd.concat([df_AI, ex_AI[sheet]], axis=0)
 
-## Lorenzo
-df_lore = pd.read_excel(data_path + 'Lorenzo_new.xlsx')
+    ## Lorenzo
+    df_LT = pd.read_excel(data_path + 'LT.xlsx')
 
-# Clean dataframes
-df_laura['act'] = df_laura.apply(lambda x: x['act.1'] if x['run'] == 3 else x['act'], axis=1)
-df_laura.drop(['Audio', 'Video', 'Unnamed: 0', 'action', 'act.1'], axis=1, inplace=True)
+    # Clean dataframes
+    ## Alessandro
+    df_AI.loc[df_AI['Unnamed: 0'] == 'act_1009', 'sociality'] = 1
+    df_AI.people_present = df_AI.people_present.fillna(0).astype('int64')
+    df_AI.multi_ag_vs_jointact = df_AI.multi_ag_vs_jointact.apply(lambda x: np.nan if x=='naN' else float(x))
+    df_AI.multi_ag_vs_jointact = df_AI.multi_ag_vs_jointact + 1
+    df_AI.multi_ag_vs_jointact = df_AI.multi_ag_vs_jointact.fillna(0).astype('int64')
+    df_AI.rename(columns={'Unnamed: 0':'act'}, inplace=True)
+    df_AI['onset_ds'] = df_AI.apply(lambda x: (float(x.onset.split(':')[0])*600 + float(x.onset.split(':')[1])*10 + float(x.onset.split(':')[2])), axis=1).astype('int64')
+    df_AI['offset_ds'] = df_AI.apply(lambda x: (float(x.offset.split(':')[0])*600 + float(x.offset.split(':')[1])*10 + float(x.onset.split(':')[2])), axis=1).astype('int64')
+    df_AI['rater'] = 'AI'
+    df_AI['action_present'] = 1
 
-df_laura = df_laura[pd.to_numeric(df_laura['main_effector'], errors='coerce').notnull()]
-df_laura['main_effector'] = df_laura['main_effector'].astype('int64')
+    ## Laura
+    df_LM['act'] = df_LM.apply(lambda x: x['act.1'] if x['run'] == 3 else x['act'], axis=1)
+    df_LM.drop(['Audio', 'Video', 'Unnamed: 0', 'action', 'act.1'], axis=1, inplace=True)
+    df_LM = df_LM[pd.to_numeric(df_LM['main_effector'], errors='coerce').notnull()]
+    df_LM['main_effector'] = df_LM['main_effector'].astype('int64')
+    df_LM.loc[df_LM.touch==-1, 'touch'] = 2
+    df_LM.loc[df_LM.act == 'act_667', 'eff_visibility'] = 0
+    df_LM.loc[df_LM.act == 'act_765', 'sociality'] = 0
+    df_LM.multi_ag_vs_jointact = df_LM.multi_ag_vs_jointact + 1
+    df_LM.multi_ag_vs_jointact = df_LM.multi_ag_vs_jointact.fillna(0).astype('int64')
+    df_LM['onset_ds'] = df_LM.apply(lambda x: (float(x.onset.split(':')[0])*60 + float(x.onset.split(':')[1]))*10, axis=1).astype('int64')
+    df_LM['offset_ds'] = df_LM.apply(lambda x: (float(x.offset.split(':')[0])*60 + float(x.offset.split(':')[1]))*10, axis=1).astype('int64')
+    df_LM['rater'] = 'LM'
+    df_LM['action_present'] = 1
+    df_LM = df_LM[df_AI.columns.tolist()]
+    
 
-df_laura.loc[df_laura.touch==-1, 'touch'] = 2
+    ## Lorenzo
+    df_LT.loc[df_LT['Unnamed: 0'] == 'act_85', 'People_present'] = 0
+    df_LT.multi_ag_vs_jointact = df_LT.multi_ag_vs_jointact + 1
+    df_LT.multi_ag_vs_jointact = df_LT.multi_ag_vs_jointact.fillna(0).astype('int64')
+    df_LT.agent_H_NH = df_LT.agent_H_NH.apply(lambda x: abs(x-1))
+    df_LT.rename(columns={'Unnamed: 0':'act', 'complexity':'predictability', 'Gesticolare':'gesticolare', 'Symbolic Gestures':'simbolic_gestures', 'People_present':'people_present'}, inplace=True)
+    df_LT.target = df_LT.target.fillna(4).astype('int64')
+    df_LT['onset_ds'] = df_LT.apply(lambda x: (float(x.onset.split(':')[0])*60 + float(x.onset.split(':')[1]))*10, axis=1).astype('int64')
+    df_LT['offset_ds'] = df_LT.apply(lambda x: (float(x.offset.split(':')[0])*60 + float(x.offset.split(':')[1]))*10, axis=1).astype('int64')
+    df_LT['rater'] = 'LT'
+    df_LT['action_present'] = 1
+    df_LT = df_LT.reindex(columns=df_AI.columns.tolist(), fill_value=None)
+    
 
-df_laura.loc[df_laura.act == 'act_667', 'eff_visibility'] = 0
-df_laura.loc[df_laura.act == 'act_765', 'sociality'] = 0
+    # Concatenate dataframes in a unique one
+    df_all = pd.concat([df_LM, df_AI, df_LT], axis=0)
 
-df_ale.loc[df_ale['Unnamed: 0'] == 'act_1009', 'sociality'] = 1
-df_lore.loc[df_lore['Unnamed: 0'] == 'act_85', 'People_present'] = 0
+    # Save files
+    df_LM.to_csv(out_path + 'LM_preprocessed.csv', sep=',', index_label=False)
+    df_AI.to_csv(out_path + 'AI_preprocessed.csv', sep=',', index_label=False)
+    df_LT.to_csv(out_path + 'LT_preprocessed.csv', sep=',', index_label=False)
 
-df_ale.people_present = df_ale.people_present.fillna(0).astype('int64')
-df_ale.multi_ag_vs_jointact = df_ale.multi_ag_vs_jointact.apply(lambda x: np.nan if x=='naN' else float(x))
-
-df_laura.multi_ag_vs_jointact = df_laura.multi_ag_vs_jointact + 1
-df_laura.multi_ag_vs_jointact = df_laura.multi_ag_vs_jointact.fillna(0).astype('int64')
-
-df_ale.multi_ag_vs_jointact = df_ale.multi_ag_vs_jointact + 1
-df_ale.multi_ag_vs_jointact = df_ale.multi_ag_vs_jointact.fillna(0).astype('int64')
-
-df_lore.multi_ag_vs_jointact = df_lore.multi_ag_vs_jointact + 1
-df_lore.multi_ag_vs_jointact = df_lore.multi_ag_vs_jointact.fillna(0).astype('int64')
-
-df_lore.agent_H_NH = df_lore.agent_H_NH.apply(lambda x: abs(x-1))
-
-df_ale.rename(columns={'Unnamed: 0':'act'}, inplace=True)
-df_lore.rename(columns={'Unnamed: 0':'act', 'complexity':'predictability', 'Gesticolare':'gesticolare', 'Symbolic Gestures':'simbolic_gestures', 'People_present':'people_present'}, inplace=True)
-
-df_lore.target = df_lore.target.fillna(4).astype('int64')
-
-df_laura = df_laura[df_ale.columns.tolist()]
-df_lore = df_lore.reindex(columns=df_ale.columns.tolist(), fill_value=None)
-
-# Change coding of columns who get very low sparsity?
-# df_lore.dinamicity = df_lore.dinamicity.apply(lambda x: abs(x-1))
-# df_laura.dinamicity = df_laura.dinamicity.apply(lambda x: abs(x-1))
-# df_ale.dinamicity = df_ale.dinamicity.apply(lambda x: abs(x-1))
-
-# df_lore.iterativity = df_lore.iterativity.apply(lambda x: abs(x-1))
-# df_laura.iterativity = df_laura.iterativity.apply(lambda x: abs(x-1))
-# df_ale.iterativity = df_ale.iterativity.apply(lambda x: abs(x-1))
-
-# df_lore.eff_visibility = df_lore.eff_visibility.apply(lambda x: abs(x-1))
-# df_laura.eff_visibility = df_laura.eff_visibility.apply(lambda x: abs(x-1))
-# df_ale.eff_visibility = df_ale.eff_visibility.apply(lambda x: abs(x-1))
-
-
-# Add column indicating rater to each dataframe
-df_laura['rater'] = 'LM'
-df_ale['rater'] = 'AI'
-df_lore['rater'] = 'LT'
-
-# Concatenate dataframes in a unique one
-df_all = pd.concat([df_laura, df_ale, df_lore], axis=0, keys=['R1', 'R2', 'R3'])
-
-# Save files
-df_laura.to_csv(out_path + 'LM_preprocessed.csv', sep=',')
-df_ale.to_csv(out_path + 'AI_preprocessed.csv', sep=',')
-df_lore.to_csv(out_path + 'LT_preprocessed.csv', sep=',')
-
-df_all.to_csv(out_path + 'combined_preprocessed.csv', sep=',')
+    df_all.to_csv(out_path + 'all_preprocessed.csv', sep=',', index_label=False)
