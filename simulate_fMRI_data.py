@@ -3,20 +3,20 @@ from nilearn import image
 from scipy.stats import zscore as zscore
 import time
 
-def convolve_HRF(model_df, tr=2, hrf_p=8.6, hrf_q=0.547, dur=12):
+def convolve_HRF(model_mat, tr=2, hrf_p=8.6, hrf_q=0.547, dur=12):
     
     """
     Convolve each column of matrix with a HRF 
     
     Inputs:
-    - model_df : dataframe of full group model
+    - model_df : matrix of full group model
     - tr : sampling interval in seconds (fMRI TR)
     - hrf_p : parameter of HRF
     - hrf_q : parameter of HRF
     - dur : duration of HRF, in seconds
 
     Outputs:
-    - group_convolved : dataframe of full group model convolved
+    - group_convolved : matrix of full group model convolved
     """
 
     # Define HRF
@@ -24,17 +24,16 @@ def convolve_HRF(model_df, tr=2, hrf_p=8.6, hrf_q=0.547, dur=12):
     hrf = (hrf_t / (hrf_p * hrf_q)) ** hrf_p * np.exp(hrf_p - hrf_t / hrf_q)
 
     # Initialize matrix to save result
-    group_convolved = np.full(model_df.shape, np.nan)
+    group_convolved = np.full(model_mat.shape, np.nan)
 
     # Iterate over columns
-    for column in range(model_df.shape[1]):
-        model = model_df[:,column]
+    for column in range(model_mat.shape[1]):
+        model = model_mat[:,column]
         model_conv = np.convolve(model, hrf, mode='full')[:model.shape[0]] # cut last part 
         model_conv = model_conv / np.max(model_conv)
         group_convolved[:,column] = model_conv
     
     return group_convolved
-
 
 
 
