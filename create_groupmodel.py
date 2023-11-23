@@ -210,7 +210,7 @@ if __name__ == '__main__':
     group_model[group_model<2] = 0
     group_model[group_model>1] = 1
 
-    # Upsample to 0.5 time resolution
+    # Upsample to 0.05sec time resolution
     group_upsampled = group_model
     group_upsampled['timedelta'] = pd.TimedeltaIndex(np.arange(group_model.shape[0])/10, unit='S')
     group_upsampled = group_model.set_index('timedelta')
@@ -238,5 +238,3 @@ if __name__ == '__main__':
     group_conv_us.to_csv(out_path + 'conv_us.csv', sep=',', index_label=False)
     group_upsampled.to_csv(out_path + 'bin_us.csv', sep=',', index_label=False)
     group_downsampled.to_csv(out_path + 'bin_ds.csv', sep=',', index_label=False)
-    
-    print('d')
