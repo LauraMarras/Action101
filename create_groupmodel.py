@@ -60,9 +60,10 @@ def expand_mat_allruns(df, features_inds, run_cuts, ratername, path, n_runs=6):
         ## Concatenate matrix to other runs
         df_exp_r = np.concatenate((df_exp_r, df_exp), axis=0)
 
-        ## Convert to dataframe
-        features = [feat for idx, feat in enumerate(df_r_run.columns.tolist()) if idx in features_inds]
-        df_exp_r = pd.DataFrame(df_exp_r[1:], columns=features)
+
+    ## Convert to dataframe
+    features = [feat for idx, feat in enumerate(df_r_run.columns.tolist()) if idx in features_inds]
+    df_exp_r = pd.DataFrame(df_exp_r[1:], columns=features)
     
     # Save
     if path:
@@ -213,9 +214,10 @@ if __name__ == '__main__':
     # Upsample to 0.05sec time resolution
     group_upsampled = group_model
     group_upsampled['timedelta'] = pd.TimedeltaIndex(np.arange(group_model.shape[0])/10, unit='S')
-    group_upsampled = group_model.set_index('timedelta')
+    group_upsampled = group_upsampled.set_index('timedelta')
     group_upsampled = group_upsampled.resample('0.05S').interpolate(method='nearest')
     group_upsampled.reset_index(drop=True, inplace=True)
+    group_upsampled.loc[len(group_upsampled)] = 0
     group_model.drop('timedelta', axis=1, inplace=True)
 
     # Downsample to resolution 2sec
@@ -238,3 +240,5 @@ if __name__ == '__main__':
     group_conv_us.to_csv(out_path + 'conv_us.csv', sep=',', index_label=False)
     group_upsampled.to_csv(out_path + 'bin_us.csv', sep=',', index_label=False)
     group_downsampled.to_csv(out_path + 'bin_ds.csv', sep=',', index_label=False)
+
+    print('d')
