@@ -4,7 +4,7 @@ from scipy.stats import zscore
 from scipy.ndimage import zoom, affine_transform
 from matplotlib import pyplot as plt
 from nilearn import image
-#from skimage import transform
+from skimage import transform
 import pandas as pd
 
 def generate_movement_regressors(nTRs, scaling, window_size=3):
@@ -32,22 +32,36 @@ def generate_movement_regressors(nTRs, scaling, window_size=3):
 def rotate_mri(mriVolume, upscale, movement_offsets):
 
     mriVolume_rot_dis_res=[]
-    x,y,z,t = mriVolume.shape()
+    x,y,z = mriVolume.shape
     #mriVolume = mriVolume.astype("uint16")
    
     # resize volume 
-    mriVolume_res = zoom.resize(mriVolume, upscale, mode='nearest')
+    #mriVolume_res = zoom(mriVolume, upscale, mode='nearest')
 
-    trans_mat = np.identity(4)
-    trans_mat[:-1,-1] = movement_offsets[-3:]
-    # apply rotation parameters
-    mriVolume_rot_dis = affine_transform(mriVolume_res, movement_offsets[0:3],movement_offsets[3:6])
+    rot_matx = np.identity(4)
+    rot_matx[1:3, 1:3] = np.array([[np.cos(movement_offsets[0]), np.sin(movement_offsets[0])],[-np.sin(movement_offsets[0]), np.cos(movement_offsets[0])]])
+    
+    rot_maty = np.identity(4)
+    rot_maty[(0,0)] = np.cos(movement_offsets[1])
+    rot_maty[(0,2)] = -np.sin(movement_offsets[1])
+    rot_maty[(2,0)] = np.sin(movement_offsets[1])
+    rot_maty[(2,2)] = np.cos(movement_offsets[1])
 
-    # scale down to original resolution
-    #mriVolume_rot_dis_res=imresize3(mriVolume_rot_dis,size(mriVolume), 'nearest');
-    #mriVolume_rot_dis_res=mriVolume_rot_dis_res([1:size(mriVolume,1)],[1:size(mriVolume,2)],[1:size(mriVolume,3)]);
+    rot_matz = np.identity(4)
+    rot_matz[0:2, 0:2] = np.array([[np.cos(movement_offsets[2]), -np.sin(movement_offsets[2])],[np.sin(movement_offsets[2]), np.cos(movement_offsets[2])]])
+    
+    rot_mat = np.matmul(rot_matx, rot_maty, rot_matz)
 
-    return mriVolume_rot_dis_res
+    rot_mat[:-1, -1] = movement_offsets[-3:]
+    
+    transformed_mat = transform.AffineTransform(rot_mat)
+    coords = transform.warp(mriVolume, transformed_mat)
+    
+    # # scale down to original resolution
+    # #mriVolume_rot_dis_res=imresize3(mriVolume_rot_dis,size(mriVolume), 'nearest');
+    # #mriVolume_rot_dis_res=mriVolume_rot_dis_res([1:size(mriVolume,1)],[1:size(mriVolume,2)],[1:size(mriVolume,3)]);
+
+    return coords
 
 
 if __name__ == '__main__':
@@ -57,13 +71,12 @@ if __name__ == '__main__':
     window_size = 3
     movement_offsets = generate_movement_regressors(nTRs, scaling, window_size)
 
-    trans_mat = np.identity(4)
-    trans_mat[:-1,-1] = movement_offsets[0,-3:]
-
     
     data = image.load_img('datasets/run1_template.nii')
     data_map = data.get_fdata()
     volume = data_map[:,:,:,0]
 
-    affine_transform(volume, trans_mat)
+    translated = rotate_mri(volume, 6, movement_offsets[0])
+    
+    print('d')
 
