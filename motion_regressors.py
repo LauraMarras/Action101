@@ -2,6 +2,8 @@ import numpy as np
 from random import randint
 from scipy.stats import zscore
 from scipy.ndimage import zoom, affine_transform
+from matplotlib import pyplot as plt
+from nilearn import image
 #from skimage import transform
 import pandas as pd
 
@@ -21,7 +23,7 @@ def generate_movement_regressors(nTRs, scaling, window_size=3):
 
     signal_final = np.empty((nTRs, nParams))
     for p in range(nParams):
-        trend_scaled = signal_fit*scaling(p)
+        trend_scaled = signal_fit*scaling[p]
         signal_final[:,p] = trend_scaled[window_size:(nTRs+window_size)]
     
     return signal_final
@@ -36,6 +38,8 @@ def rotate_mri(mriVolume, upscale, movement_offsets):
     # resize volume 
     mriVolume_res = zoom.resize(mriVolume, upscale, mode='nearest')
 
+    trans_mat = np.identity(4)
+    trans_mat[:-1,-1] = movement_offsets[-3:]
     # apply rotation parameters
     mriVolume_rot_dis = affine_transform(mriVolume_res, movement_offsets[0:3],movement_offsets[3:6])
 
@@ -44,3 +48,22 @@ def rotate_mri(mriVolume, upscale, movement_offsets):
     #mriVolume_rot_dis_res=mriVolume_rot_dis_res([1:size(mriVolume,1)],[1:size(mriVolume,2)],[1:size(mriVolume,3)]);
 
     return mriVolume_rot_dis_res
+
+
+if __name__ == '__main__':
+
+    nTRs = 260
+    scaling = np.concatenate(((np.random.randn(3)/10), (np.random.randn(3)/3)), 0)
+    window_size = 3
+    movement_offsets = generate_movement_regressors(nTRs, scaling, window_size)
+
+    trans_mat = np.identity(4)
+    trans_mat[:-1,-1] = movement_offsets[0,-3:]
+
+    
+    data = image.load_img('datasets/run1_template.nii')
+    data_map = data.get_fdata()
+    volume = data_map[:,:,:,0]
+
+    affine_transform(volume, trans_mat)
+
