@@ -2,6 +2,7 @@ import numpy as np
 from random import randint
 from scipy.stats import zscore
 from scipy.ndimage import zoom, affine_transform
+from scipy.spatial.transform import Rotation
 from matplotlib import pyplot as plt
 from nilearn import image
 from skimage import transform
@@ -35,33 +36,42 @@ def rotate_mri(mriVolume, upscale, movement_offsets):
     x,y,z = mriVolume.shape
     #mriVolume = mriVolume.astype("uint16")
    
-    # resize volume 
+    # Upsample volume
     #mriVolume_res = zoom(mriVolume, upscale, mode='nearest')
 
-    rot_matx = np.identity(4)
-    rot_matx[1:3, 1:3] = np.array([[np.cos(movement_offsets[0]), np.sin(movement_offsets[0])],[-np.sin(movement_offsets[0]), np.cos(movement_offsets[0])]])
+    # Rotation
+    ## Convert rotation values to radians
+    rotation_radians = np.deg2rad(movement_offsets[:3])
     
-    rot_maty = np.identity(4)
-    rot_maty[(0,0)] = np.cos(movement_offsets[1])
-    rot_maty[(0,2)] = -np.sin(movement_offsets[1])
-    rot_maty[(2,0)] = np.sin(movement_offsets[1])
-    rot_maty[(2,2)] = np.cos(movement_offsets[1])
+    ## Create rotation matrices for each axis and combine them
+    rotation_matrices = []
+    for i in range(3):
+        rotation_axis = np.zeros(3)
+        rotation_axis[i] = 1  # Set the corresponding axis to 1 for rotation
+        rotation = Rotation.from_rotvec(rotation_radians[i] * rotation_axis)
+        rotation_matrices.append(rotation.as_matrix())
 
-    rot_matz = np.identity(4)
-    rot_matz[0:2, 0:2] = np.array([[np.cos(movement_offsets[2]), -np.sin(movement_offsets[2])],[np.sin(movement_offsets[2]), np.cos(movement_offsets[2])]])
-    
-    rot_mat = np.matmul(rot_matx, rot_maty, rot_matz)
+    ## Combine rotation matrices for each axis
+    combined_rotation_matrix = np.eye(4)
+    for rot_matrix in rotation_matrices:
+        combined_rotation_matrix = np.dot(combined_rotation_matrix, np.vstack((rot_matrix, [0, 0, 0, 1])))
 
-    rot_mat[:-1, -1] = movement_offsets[-3:]
-    
-    transformed_mat = transform.AffineTransform(rot_mat)
-    coords = transform.warp(mriVolume, transformed_mat)
-    
+
+    # Translation
+    translation_matrix = np.eye(4)
+    translation_matrix[:3, 3] = movement_offsets[3:]
+
+    # Combine translation and rotation matrices
+    combined_matrix = np.dot(translation_matrix, combined_rotation_matrix)
+
+    # Apply the combined transformation to the original 3D matrix
+    transformed_matrix = np.dot(mriVolume, combined_matrix)
+
     # # scale down to original resolution
     # #mriVolume_rot_dis_res=imresize3(mriVolume_rot_dis,size(mriVolume), 'nearest');
     # #mriVolume_rot_dis_res=mriVolume_rot_dis_res([1:size(mriVolume,1)],[1:size(mriVolume,2)],[1:size(mriVolume,3)]);
 
-    return coords
+    return transformed_matrix
 
 
 if __name__ == '__main__':
