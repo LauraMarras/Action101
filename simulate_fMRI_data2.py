@@ -3,6 +3,8 @@ from nilearn import image
 from scipy.stats import zscore as zscore
 import time
 
+from motion_regressors import generate_movement_regressors, rotate_mri
+
 if __name__ == '__main__':
     tstart = time.time()
     # Define parameters
@@ -21,9 +23,9 @@ if __name__ == '__main__':
 
     # Define options
     add_noise = True
-    add_trend = False
-    add_motion = False
-    save = False
+    add_trend = True
+    add_motion = True
+    save = True
 
     # Load task data
     data_path = 'Data/Carica101_Models/Domains/group_us_conv_'
@@ -70,38 +72,55 @@ if __name__ == '__main__':
     
     print('Done with: generating and adding noise. It took:    ', time.time() - tstart, '  seconds')
 
-    # Generate Trend (for each run separately)
-    if add_trend:
-        trend = np.zeros((x, y, slices, n_points))
-        idx = 0
-        rc = 0
-        for run_len in run_cuts:
-            run_idx = [*range(idx, run_len+idx)]
+    
+    idx=0
+    for r, run_len in enumerate(run_cuts[:2]):
+        run_idx = [*range(idx, run_len+idx)]
+        
+        # Get data of single run 
+        data_run = data_signal[:,:,:,run_idx]
+
+        # Generate Trend (for each run separately)
+        if add_trend:
+            trend = np.zeros((x, y, slices, run_len))
             for i in range(x):
                 for j in range(y):
                     for s in range(slices):
                         temp_s = zscore((data_map[i,j,s,:] - data_avg[i,j,s]))
                         poly_coeffs = np.polyfit(np.arange(temp_s.shape[0]), temp_s, poly_deg)
-                        trend[i,j,s, run_idx] = np.round(np.polyval(poly_coeffs, np.arange(run_len)))
-            idx+=run_len
-            rc+=1
-            print('Done with: generating trend for run {}. It took:    '.format(rc), time.time() - tstart, '  seconds')
-        data_signal += trend
+                        trend[i,j,s,:] = np.round(np.polyval(poly_coeffs, np.arange(run_len)))
+
+            data_run += trend
+            print('Done with: generating trend for run {}. It took:    '.format(r), time.time() - tstart, '  seconds')
+            
     
-    print('Done with: generating and adding trend for each run. It took:    ', time.time() - tstart, '  seconds')
-
-    # Zscore
-    data_final = zscore((data_signal), 3)
-    for t in range(n_points):
-        data_final[:,:,:,t] = data_final[:,:,:,t]*data_std + data_avg
+        # Zscore
+        run_zscore = np.full(data_run.shape, np.nan)
+        run_zscore = zscore((data_run), 3)        
+        for t in range(run_len):
+            run_zscore[:,:,:,t] = run_zscore[:,:,:,t]*data_std + data_avg
+        
+        print('Done with: zscoring for run {}. It took:    '.format(r), time.time() - tstart, '  seconds')
     
-    # Add motion
+        # Add motion
+        if add_motion:
+            movement_offsets = generate_movement_regressors(run_len, SNR_movement)
+            run_motion = np.full(run_zscore.shape, np.nan)
+            for t in range(run_len):
+                run_motion[:,:,:, t] = rotate_mri(run_zscore[:,:,:,t], movement_upscale, movement_offsets[t,:])
+            print('Done with: adding motion for run {}. It took:    '.format(r), time.time() - tstart, '  seconds')
+        
+        # Save data
+            if save:
+                image_final = image.new_img_like(data, run_motion, copy_header=True)
+                image_final.to_filename('run_motion_{}.nii'.format(r))
 
+        else:
+            if save:
+                image_final = image.new_img_like(data, run_zscore, copy_header=True)
+                image_final.to_filename('run_final_{}.nii'.format(r))
+        
+        idx+=run_len
 
-
-    # Save data
-    if save:
-        image_final = image.new_img_like(data, data_final, copy_header=True)
-        image_final.to_filename('dati_simul.nii')
-
-    print(time.time() - tstart)
+    print('Done with: all. It took:    '.format(r), time.time() - tstart, '  seconds')
+        
