@@ -7,6 +7,8 @@ os.environ['BLIS_NUM_THREADS'] = '1'
 from sklearn.cross_decomposition import CCA
 import numpy as np
 
+from pareto_right_tail import pareto_right
+
 def canoncorrelation(X,Y, center=True, adjust=True):
     
     """
@@ -144,14 +146,15 @@ def run_canoncorr(roi, perm_schema, domains, adjust=True):
 
     return results
 
-def pvals(results):
+def pvals(results, pareto=False):
     
     """
     Get p value for each domain
     
     Inputs:
     - results : matrix of shape = n_perms, n_domains; containing R2 values for each permutation and each domain
-    
+    - pareto : wether to do pareto; default = False
+
     Outputs:
     - pvalues : array of shape = n_domains
     """
@@ -163,16 +166,26 @@ def pvals(results):
     # Get true R
     r_true = results[0,:]
 
-    # Sort permuted results
-    res_sorted = np.sort(results, axis=0)
+    if pareto:
+        # Pareto
+        pvals = np.full((n_domains), np.nan)
+        critical_values_at_p = np.full((n_domains), np.nan)
+        for d in range(n_domains):
+            pvals[d], critical_values_at_p[d] = pareto_right(results[1:,d], r_true[d], critical_p=0.05)
 
-    # Get position of true result in sorted matrix for each domain
-    positions = np.array([np.where(np.isclose(res_sorted[:,d], r_true[d]))[0][0] for d in range(n_domains)])
+    else:
+        # Sort permuted results
+        res_sorted = np.sort(results, axis=0)
 
-    # Calculate pval based on position
-    pvals = 1-((positions)/(n_perms+1))
+        # Get position of true result in sorted matrix for each domain
+        positions = np.array([np.where(np.isclose(res_sorted[:,d], r_true[d]))[0][0] for d in range(n_domains)])
 
-    return pvals
+        # Calculate pval based on position
+        pvals = 1-((positions)/(n_perms+1))
+
+        # Get critical values at p
+
+    return pvals, critical_values_at_p
 
 def gen_correlated_data(realdata, n_voxels=100, noise=1):
     
