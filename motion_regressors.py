@@ -34,10 +34,10 @@ def rotate_mri(mriVolume, upscale, movement_offsets):
     x,y,z = mriVolume.shape
     #mriVolume = mriVolume.astype("uint16")
     
-    tstart = time.time()
+   # tstart = time.time()
     # Upsample volume
     mriVolume_res = zoom(mriVolume, upscale, mode='nearest', order=0)
-    print(time.time() - tstart)
+   # print(time.time() - tstart)
     
     #rotation matrix
     rotation = transform.SimilarityTransform(rotation=np.radians(movement_offsets[:3]),dimensionality=3)
@@ -54,7 +54,7 @@ def rotate_mri(mriVolume, upscale, movement_offsets):
     trans_coords = np.matmul(coords, np.linalg.inv(matrix).T) # .T)
     trans_coords = np.delete(trans_coords,3,axis=3).astype(int)
 
-    tloop = time.time()
+   # tloop = time.time()
    # pad = np.max((np.abs(trans_coords.max() - trans_coords.shape[0]), np.abs(trans_coords.min())))
     pad = np.max(np.concatenate((np.abs(np.max(trans_coords, (0,1,2)) - (np.array(trans_coords.shape[:3])-1)), np.abs(np.min(trans_coords, (0,1,2))))))
     mripadded = np.pad(mriVolume_res, pad, mode='constant')
@@ -67,13 +67,13 @@ def rotate_mri(mriVolume, upscale, movement_offsets):
 
     final = mripadded[x,y,z] 
     
-    print(time.time() - tloop)
+   # print(time.time() - tloop)
 
-    tresize2 = time.time()
+   # tresize2 = time.time()
     # scale down to original resolution
     mriVolume_rot_dis_res = zoom(final, 1/upscale, mode='nearest', order=0)
    # mriVolume_rot_dis_res = mriVolume_rot_dis_res([1:size(mriVolume,1)],[1:size(mriVolume,2)],[1:size(mriVolume,3)]);
-    print(time.time() - tresize2)
+   # print(time.time() - tresize2)
 
     return mriVolume_rot_dis_res
 
