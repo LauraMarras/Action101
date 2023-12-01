@@ -146,7 +146,7 @@ def run_canoncorr(roi, perm_schema, domains, adjust=True):
 
     return results
 
-def pvals(results, pareto=False):
+def pvals(results, critical_p=0.05, pareto=False, plot=False):
     
     """
     Get p value for each domain
@@ -171,8 +171,8 @@ def pvals(results, pareto=False):
         pvals = np.full((n_domains), np.nan)
         critical_values_at_p = np.full((n_domains), np.nan)
         for d in range(n_domains):
-            pvals[d], critical_values_at_p[d] = pareto_right(results[1:,d], r_true[d], critical_p=0.05)
-
+            pvals[d], critical_values_at_p[d] = pareto_right(results[:,d], critical_p=critical_p, plot=plot)
+        
     else:
         # Sort permuted results
         res_sorted = np.sort(results, axis=0)
@@ -184,6 +184,7 @@ def pvals(results, pareto=False):
         pvals = 1-((positions)/(n_perms+1))
 
         # Get critical values at p
+        critical_values_at_p = np.percentile(results, (1-critical_p)*100, axis=0)
 
     return pvals, critical_values_at_p
 
@@ -239,3 +240,13 @@ def gen_fmri_signal(t_points=1614, tr=2, n_voxels=100):
         fakedata[:, voxel] = np.sin(2 * np.pi * t / (tr * 30)+ phase_shift) + 0.5 * np.random.randn()
         
     return fakedata
+
+
+
+
+if __name__ == '__main__':
+
+    distro_domains = np.load('results_n05.npy')[0,:,:]
+    pvals_domains, criticalv_domains = pvals(distro_domains, pareto=False)
+    pvals_domains_par, criticalv_domains_par = pvals(distro_domains, pareto=True, plot=True)
+    print('d')
