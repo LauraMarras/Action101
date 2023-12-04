@@ -22,18 +22,18 @@ if __name__ == '__main__':
     SNR_movement = np.concatenate(((np.random.randn(3)/10), (np.random.randn(3)/3)), 0)
 
     # Define options
-    add_noise = True
-    add_trend = True
-    add_motion = True
+    add_noise = False
+    add_trend = False
+    add_motion = False
     save = True
 
     # Load task data
-    data_path = 'Data/Carica101_Models/Domains/group_us_conv_'
+    data_path = 'data/Carica101_Models/Domains/group_us_conv_'
     task = np.loadtxt(data_path + 'agent_objective.csv', delimiter=',', skiprows=1)[:, 1:]
 
     # Load fMRI data and Mask
-    data = image.load_img('datasets/run1_template.nii')
-    mask = image.load_img('datasets/atlas_2orig.nii')
+    data = image.load_img('data/Simulazione_Datasets/run1_template.nii')
+    mask = image.load_img('data/Simulazione_Datasets/atlas_2orig.nii')
     data_map = data.get_fdata()
     mask_map = mask.get_fdata()
 
@@ -113,12 +113,12 @@ if __name__ == '__main__':
         # Save data
             if save:
                 image_final = image.new_img_like(data, run_motion, copy_header=True)
-                image_final.to_filename('run_motion_{}.nii'.format(r))
+                image_final.to_filename('data/Simulazione_Results/run_motion_{}.nii'.format(r))
 
         else:
             if save:
                 image_final = image.new_img_like(data, run_zscore, copy_header=True)
-                image_final.to_filename('run_final_{}.nii'.format(r))
+                image_final.to_filename('data/Simulazione_Results/run_nomotion_{}.nii'.format(r))
         
         idx+=run_len
 
