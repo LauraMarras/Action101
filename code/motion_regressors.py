@@ -28,54 +28,64 @@ def generate_movement_regressors(nTRs, scaling, window_size=3):
     return signal_final
 
 
-def rotate_mri(mriVolume, upscale, movement_offsets):
-
-    mriVolume_rot_dis_res=[]
-    x,y,z = mriVolume.shape
-    #mriVolume = mriVolume.astype("uint16")
+def rotate_mri(volume, movement_offsets, upscale=False, upscalefactor=6):
     
-   # tstart = time.time()
+    tstart = time.time()
+    
     # Upsample volume
-    mriVolume_res = zoom(mriVolume, upscale, mode='nearest', order=0)
-   # print(time.time() - tstart)
-    
-    #rotation matrix
-    rotation = transform.SimilarityTransform(rotation=np.radians(movement_offsets[:3]),dimensionality=3)
-    shift = transform.SimilarityTransform(translation=-np.array(mriVolume_res.shape[:3])/2,dimensionality=3)
-    # translation matrix
-    translation = transform.SimilarityTransform(translation=movement_offsets[3:6],dimensionality=3) 
+    if upscale:
+        volume = zoom(volume, upscalefactor, mode='nearest', order=0)
+        tupscale = time.time() - tstart
+
+    # Create rotation matrix
+    angles = np.radians(movement_offsets[:3])
+    shift = - np.array(volume.shape)/2 #Add shift to move origin to the center
+    rotation = transform.SimilarityTransform(rotation=angles, translation=shift, dimensionality=3)
+    r = transform.SimilarityTransform(rotation=angles, dimensionality=3)
+    s = transform.SimilarityTransform(translation=shift, dimensionality=3)
+
+    # Create translation matrix
+    displacement = movement_offsets[3:]
+    translation = transform.SimilarityTransform(translation=displacement-shift, dimensionality=3) # Shift back to origin
+    t = transform.SimilarityTransform(translation=displacement, dimensionality=3)
 
     # Compose transforms by multiplying their matrices
-    matrix = translation.params @ np.linalg.inv(shift.params) @ rotation.params @ shift.params
+    matrix = translation.params @ rotation.params
+    m = t.params @ np.linalg.inv(s.params) @ r.params @ s.params
 
-    # apply transforms to coordinates
-    coords = np.rollaxis(np.indices(mriVolume_res.shape), 0, len(mriVolume_res.shape)+1)
-    coords = np.append(coords,np.ones((coords.shape[0],coords.shape[1],coords.shape[2],1)), axis=3)
-    trans_coords = np.matmul(coords, np.linalg.inv(matrix).T) # .T)
-    trans_coords = np.delete(trans_coords,3,axis=3).astype(int)
+    # Apply transforms to coordinates
+    coords = np.rollaxis(np.indices(volume.shape), 0, 1+volume.ndim)
+    coords = np.append(coords, np.ones((coords.shape[0], coords.shape[1], coords.shape[2], 1)), axis=3)
+    trans_coords = np.dot(coords, np.linalg.inv(matrix).T)
+    t_c = np.dot(coords, np.linalg.inv(m).T)
+    trans_coords = np.delete(trans_coords, 3, axis=3).astype(int)
+    t_c = np.delete(t_c, 3, axis=3).astype(int)
 
-   # tloop = time.time()
-   # pad = np.max((np.abs(trans_coords.max() - trans_coords.shape[0]), np.abs(trans_coords.min())))
-    pad = np.max(np.concatenate((np.abs(np.max(trans_coords, (0,1,2)) - (np.array(trans_coords.shape[:3])-1)), np.abs(np.min(trans_coords, (0,1,2))))))
-    mripadded = np.pad(mriVolume_res, pad, mode='constant')
+    # Add padding to original volume
+    # pad = np.max((np.abs(trans_coords.max() - trans_coords.shape[0]), np.abs(trans_coords.min())))
+    # pad = np.max(np.concatenate((np.abs(np.max(trans_coords, (0,1,2)) - (np.array(trans_coords.shape[:3])-1)), np.abs(np.min(trans_coords, (0,1,2))))))
+    pad = np.max(volume.shape)
+    mripadded = np.pad(volume, pad, mode='constant')
     trans_coords = trans_coords+pad
-    final = np.full(mriVolume_res.shape, np.nan)
+    t_c = t_c+pad
     
     x = trans_coords[:,:,:,0]
     y = trans_coords[:,:,:,1]
     z = trans_coords[:,:,:,2] 
 
+    x1 = t_c[:,:,:,0]
+    y1 = t_c[:,:,:,1]
+    z1 = t_c[:,:,:,2] 
+
+    # final = np.full(volume.shape, np.nan)
     final = mripadded[x,y,z] 
+    final1 =  mripadded[x1,y1,z1]
     
-   # print(time.time() - tloop)
-
-   # tresize2 = time.time()
     # scale down to original resolution
-    mriVolume_rot_dis_res = zoom(final, 1/upscale, mode='nearest', order=0)
-   # mriVolume_rot_dis_res = mriVolume_rot_dis_res([1:size(mriVolume,1)],[1:size(mriVolume,2)],[1:size(mriVolume,3)]);
-   # print(time.time() - tresize2)
-
-    return mriVolume_rot_dis_res
+    if upscale:
+        final = zoom(final, 1/upscale, mode='nearest', order=0)
+  
+    return final, final1
 
 
 if __name__ == '__main__':
@@ -86,18 +96,18 @@ if __name__ == '__main__':
    # movement_offsets = generate_movement_regressors(nTRs, scaling, window_size)
     movement_offsets = np.array([0,0,90,0,0,0]) 
     
-    data = image.load_img('datasets/run1_template.nii')
+    data = image.load_img('data/simulazione_datasets/run1_template.nii')
     data_map = data.get_fdata()
     data_map = data_map.astype('float32')
     
-    # Upsample volume
-    tstart = time.time()
-    mriVolume_res = zoom(data_map[:,:,:,:10],[2,2,2,1], mode='nearest', order=0)
-    print(time.time() - tstart)
-    volume = mriVolume_res[:,:,:,0]
+    # # Upsample volume
+    # tstart = time.time()
+    # mriVolume_res = zoom(data_map[:,:,:,:10],[2,2,2,1], mode='nearest', order=0)
+    # print(time.time() - tstart)
+    # volume = mriVolume_res[:,:,:,0]
 
 
-    translated = rotate_mri(volume, 6, movement_offsets)
+    final, final1 = rotate_mri(data_map[:,:,:,0], movement_offsets)
     
     print('d')
 
