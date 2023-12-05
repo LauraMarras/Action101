@@ -1,11 +1,209 @@
 import numpy as np
 from nilearn import image
-from scipy.stats import zscore as zscore
+from scipy.stats import zscore
+from scipy.ndimage import zoom
+from skimage import transform
+import pandas as pd
 import time
+from matplotlib import pyplot as plt
+import sys
 
-from motion_regressors import generate_movement_regressors, rotate_mri
+def get_movement_offsets(nTRs, SNR, dims=3, window_size=3, seed=0):
+    
+    """
+    Generate movement offsets signal along time
+
+    Inputs:
+    - nTRs : int, number of TRs of wanted signal
+    - SNR : tuple of int, signal to noise, determines how much to scale offsets for rotation and traslation
+    - dims : int, dimensionality of volume; default = 3
+    - window_size : int, size (number of TRs) of window used for smoothing signal; default = 3
+    - seed : seed for the random generation; default = 0
+
+    Outputs:
+    - offset_signals : signal for each movement offset, matrix of shape nTRs by dims*2
+    """
+
+    # Set seed
+    np.random.seed(seed)
+
+    # Set scaling
+    scaling = np.concatenate(((np.random.randn(dims)/SNR[0]), (np.random.randn(dims)/SNR[1])), 0)
+        
+    # Create single signal
+    x = np.arange(0,nTRs+window_size)
+    deg = np.random.randint(2,7)
+    poly_coeffs = np.random.randn(deg)
+    signal_fit = np.polyval(poly_coeffs,x)
+    signal_fit = zscore(signal_fit) + np.random.randn(len(x))
+    signal_fit = signal_fit/np.std(signal_fit)
+    signal_series = pd.Series(signal_fit)
+    signal_fit = signal_series.rolling(window_size+1).mean()
+
+    # Scale signal for each scaling and create offset signals
+    offsets_signals = np.full((nTRs, dims*2), np.nan)
+    for p in range(dims*2):
+        trend_scaled = signal_fit*scaling[p]
+        offsets_signals[:,p] = trend_scaled[window_size:(nTRs+window_size)]
+    
+    return offsets_signals
+
+def affine_transform(volume, movement_offsets, upscalefactor=6, printtimes=False):
+    
+    """
+    Applies affine transform to MRI volume given rotation and traslation offsets
+
+    Inputs:
+    - volume : original MRI volume, matrix of shape x by y by z
+    - movement_offsets : movement offsets, array of shape 6 (3 rotation and 3 traslation)
+    - upscalefactor : factor to which upscale image, int, upscalefactor == 1 means no upscaling; default = 6
+    - printtimes : bool, whether to print times for each operation (upscaling, transform, downscaling); default = False
+    
+    Outputs:
+    - trans_volume : transformed volume, matrix of shape x by y by z
+    """
+
+    tstart = time.time()
+    
+    # Upsample volume
+    if upscalefactor != 1:
+        volume = zoom(volume, upscalefactor, mode='nearest', order=0)
+    tupscale = time.time() - tstart
+
+    # Get volume coordinates 
+    coords = np.rollaxis(np.indices(volume.shape), 0, 1+volume.ndim)
+    coords = np.append(coords, np.ones((coords.shape[0], coords.shape[1], coords.shape[2], 1)), axis=3) # Add 1s to match shape for multiplication
+    
+    # Create rotation, shift and translation matrices
+    angles = np.radians(movement_offsets[:3])
+    shift = - np.array(volume.shape)/2 # shift to move origin to the center
+    displacement = movement_offsets[3:]
+
+    r = transform.SimilarityTransform(rotation=angles, dimensionality=3)
+    s = transform.SimilarityTransform(translation=shift, dimensionality=3)
+    t = transform.SimilarityTransform(translation=displacement, dimensionality=3)
+    
+    # Compose transforms by multiplying their matrices (mind the order of the operations)
+    trans_matrix = t.params @ np.linalg.inv(s.params) @ r.params @ s.params
+
+    # Apply transforms to coordinates
+    trans_coords = np.dot(coords, np.linalg.inv(trans_matrix).T)
+    trans_coords = np.delete(trans_coords, 3, axis=3).astype(int)
+
+    # Add padding to original volume
+    pad = np.max(np.concatenate((np.abs(np.max(trans_coords, (0,1,2)) - (np.array(trans_coords.shape[:3])-1)), np.abs(np.min(trans_coords, (0,1,2))))))
+    volume_padded = np.pad(volume, pad, mode='constant')
+    trans_coords = trans_coords+pad
+    
+    # Map from original to transformed volume through transformed coordinates
+    x = trans_coords[:,:,:,0]
+    y = trans_coords[:,:,:,1]
+    z = trans_coords[:,:,:,2] 
+
+    trans_volume = volume_padded[x,y,z] 
+    ttransform = time.time() - tupscale
+
+    # Scale down to original resolution
+    if upscalefactor != 1:
+        trans_volume = zoom(trans_volume, 1/upscalefactor, mode='nearest', order=0)
+    tdownscale = time.time() - ttransform
+
+    if printtimes:
+        print('Time to upscale:{}s \nTime to transform:{}s \nTime to downscale:{}s'.format(tupscale, ttransform, tdownscale))
+    
+    return trans_volume
+
+def plot_transform(original, transformed, off, xyz=(64, 64, 19), save=None, cross=True):
+    
+    """
+    Plots 3d view of original and transformed MRI volumes
+
+    Inputs:
+    - original : matrix of shape x by y by s
+    - transformed : matrix of shape x by y by s (output of affine_transform)
+    - off : movement offsets, array of shape 6 (3 rotation and 3 traslation)
+    - xyz : tuple of len=3 indicating slices to show; default = (64, 64, 19)
+    - save : filename to save figure, if want to save; default = None
+    - cross : whether to add crosses indicating slices; default = True
+    
+    Outputs:
+    - saves or shows figure
+    """
+    
+    # Get slice coords
+    x,y,s = xyz
+    
+    # Create figure with 6 subplots
+    fig, axs = plt.subplots(3,2, gridspec_kw=dict(height_ratios=[128/38, 1, 1], width_ratios=[1,1]),  sharex=True, sharey=False)
+    
+    # Axial
+    axs[0,0].imshow(original[:,:,s])
+    axs[0,1].imshow(transformed[:,:,s])
+   
+    # Sagittal
+    axs[1,0].imshow(original[x,:,:].T)
+    axs[1,1].imshow(transformed[x,:,:].T)
+    
+    # Coronal
+    axs[2,0].imshow(original[:,y,:].T)
+    axs[2,1].imshow(transformed[:,y,:].T)
+    
+    # Invert axes
+    for ax in fig.axes:
+        ax.invert_yaxis()
+    
+    # Add crosses
+    if cross:
+        axs[0,0].axvline(y, lw=0.5, ls='--', color='r')
+        axs[0,1].axvline(y, lw=0.5, ls='--', color='r')
+        axs[0,0].axhline(x, lw=0.5, ls='--', color='r')
+        axs[0,1].axhline(x, lw=0.5, ls='--', color='r')
+
+        axs[1,0].axvline(y, lw=0.5, ls='--', color='r')
+        axs[1,1].axvline(y, lw=0.5, ls='--', color='r')
+        axs[1,0].axhline(s, lw=0.5, ls='--', color='r')
+        axs[1,1].axhline(s, lw=0.5, ls='--', color='r')
+
+        axs[2,0].axvline(x, lw=0.5, ls='--', color='r')
+        axs[2,1].axvline(x, lw=0.5, ls='--', color='r')
+        axs[2,0].axhline(s, lw=0.5, ls='--', color='r')
+        axs[2,1].axhline(s, lw=0.5, ls='--', color='r')
+
+    # Add Titles
+    axs[0,0].set_title('Original Volume', fontsize=12)
+    axs[0,1].set_title('Transformed Volume', fontsize=12)
+
+    axs[0,0].set_ylabel('Axial \n(z={})'.format(s))
+    axs[1,0].set_ylabel('Sagittal \n(x={})'.format(x))
+    axs[2,0].set_ylabel('Coronal \n(y={})'.format(y))
+
+    # Add transformation parameters
+    off = [round(c,3) for c in movement_offsets]
+    plt.text(0.01, 0.99,
+             'traslation:\nx={}  y={}  z={}'.format(off[3], off[4], off[5]),
+             verticalalignment='top', horizontalalignment='left',
+             transform=plt.gcf().transFigure,
+             color='purple', fontsize=9)
+    
+    plt.text(0.51, 0.99,
+             'rotation:\npitch={}  roll={}  yaw={}'.format(off[0], off[1], off[2]),
+             verticalalignment='top', horizontalalignment='left',
+             transform=plt.gcf().transFigure,
+             color='green', fontsize=9)
+
+    # Save
+    if save:
+        plt.savefig(save)
+    else:
+        plt.show()
+
 
 if __name__ == '__main__':
+
+    orig_stdout = sys.stdout
+    f = open('out.txt', 'w')
+    sys.stdout = f
+
     tstart = time.time()
     # Define parameters
     n_points = 1614
@@ -16,14 +214,16 @@ if __name__ == '__main__':
     run_cuts = (np.array([536,450,640,650,472,480])/TR).astype('int')
     poly_deg = 1 + round(TR*(run_cuts.sum()/len(run_cuts))/150)
 
+    fname='simul'
+
     # Movement parameters
     movement_upscale = 6
-    SNR_movement = np.concatenate(((np.random.randn(3)/10), (np.random.randn(3)/3)), 0)
+    SNR_movement = (10, 3)
 
     # Define options
-    add_noise = False
-    add_trend = False
-    add_motion = False
+    add_noise = True
+    add_trend = True
+    add_motion = True
     save = True
 
     # Load task data
@@ -61,11 +261,11 @@ if __name__ == '__main__':
         noise = np.repeat(np.random.randn(x, y, 1)+SNR_base, signal.shape[0], axis=2)
         data_signal[x_inds, y_inds, s, :] = signal*noise[x_inds, y_inds, :]
 
-
     print('Done with: creating fMRI signal from task. It took:    ', time.time() - tstart, '  seconds')
 
     # Generate Noise
     if add_noise:
+        fname+='_noise'
         noise = np.random.randn(x, y, slices, n_points)*noise_level
         data_signal += noise
     
@@ -81,6 +281,7 @@ if __name__ == '__main__':
 
         # Generate Trend (for each run separately)
         if add_trend:
+            fname+='_trend'
             trend = np.zeros((x, y, slices, run_len))
             for i in range(x):
                 for j in range(y):
@@ -90,7 +291,7 @@ if __name__ == '__main__':
                         trend[i,j,s,:] = np.round(np.polyval(poly_coeffs, np.arange(run_len)))
 
             data_run += trend
-            print('Done with: generating trend for run {}. It took:    '.format(r), time.time() - tstart, '  seconds')
+            print('Done with: generating trend for run {}. It took:    '.format(r+1), time.time() - tstart, '  seconds')
             
     
         # Zscore
@@ -99,26 +300,33 @@ if __name__ == '__main__':
         for t in range(run_len):
             run_zscore[:,:,:,t] = run_zscore[:,:,:,t]*data_std + data_avg
         
-        print('Done with: zscoring for run {}. It took:    '.format(r), time.time() - tstart, '  seconds')
+        print('Done with: zscoring for run {}. It took:    '.format(r+1), time.time() - tstart, '  seconds')
     
         # Add motion
         if add_motion:
-            movement_offsets = generate_movement_regressors(run_len, SNR_movement)
+            fname+='_motion'
+            movement_offsets = get_movement_offsets(run_len, SNR_movement)
             run_motion = np.full(run_zscore.shape, np.nan)
             for t in range(run_len):
-                run_motion[:,:,:, t] = rotate_mri(run_zscore[:,:,:,t], movement_upscale, movement_offsets[t,:])
-            print('Done with: adding motion for run {}. It took:    '.format(r), time.time() - tstart, '  seconds')
+                run_motion[:,:,:, t] = affine_transform(run_zscore[:,:,:,t], movement_offsets[t,:], upscalefactor=movement_upscale, printtimes=True)
+            print('Done with: adding motion for run {}. It took:    '.format(r+1), time.time() - tstart, '  seconds')
         
+            
         # Save data
             if save:
+                fname+='_run{}'.format(r+1)
                 image_final = image.new_img_like(data, run_motion, copy_header=True)
-                image_final.to_filename('data/simulazione_results/run_motion_{}.nii'.format(r))
+                image_final.to_filename('data/simulazione_results/{}.nii'.format(fname))
 
         else:
             if save:
+                fname+='_run{}'.format(r+1)
                 image_final = image.new_img_like(data, run_zscore, copy_header=True)
-                image_final.to_filename('data/simulazione_results/run_nomotion_{}.nii'.format(r))
+                image_final.to_filename('data/simulazione_results/{}.nii'.format(fname))
         
         idx+=run_len
 
-    print('Done with: all. It took:    '.format(r), time.time() - tstart, '  seconds')
+    print('Done with: all. It took:    '.format(r+1), time.time() - tstart, '  seconds')
+    
+    sys.stdout = orig_stdout
+    f.close()
