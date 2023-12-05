@@ -7,34 +7,65 @@ import pandas as pd
 import time
 from matplotlib import pyplot as plt
 
-def generate_movement_regressors(nTRs, scaling, window_size=3):
+def get_movement_offsets(nTRs, dims=3, window_size=3, seed=0):
+    
+    """
+    Generate movement offsets signal along time
 
-    nParams = len(scaling)
+    Inputs:
+    - nTRs : int, number of TRs of wanted signal
+    - dims : int, dimensionality of volume; default = 3
+    - window_size : int, size (number of TRs) of window used for smoothing signal; default = 3
+    - seed : seed for the random generation; default = 0
 
+    Outputs:
+    - offset_signals : signal for each movement offset, matrix of shape nTRs by dims*2
+    """
+
+    # Set seed
+    np.random.seed(seed)
+
+    # Set scaling
+    scaling = np.concatenate(((np.random.randn(dims)/10), (np.random.randn(dims)/3)), 0)
+        
+    # Create single signal
     x = np.arange(0,nTRs+window_size)
     deg = np.random.randint(2,7)
     poly_coeffs = np.random.randn(deg)
-    
     signal_fit = np.polyval(poly_coeffs,x)
     signal_fit = zscore(signal_fit) + np.random.randn(len(x))
     signal_fit = signal_fit/np.std(signal_fit)
     signal_series = pd.Series(signal_fit)
     signal_fit = signal_series.rolling(window_size+1).mean()
 
-    signal_final = np.empty((nTRs, nParams))
-    for p in range(nParams):
+    # Scale signal for each scaling and create offset signals
+    offsets_signals = np.full((nTRs, dims*2), np.nan)
+    for p in range(dims*2):
         trend_scaled = signal_fit*scaling[p]
-        signal_final[:,p] = trend_scaled[window_size:(nTRs+window_size)]
+        offsets_signals[:,p] = trend_scaled[window_size:(nTRs+window_size)]
     
-    return signal_final
+    return offsets_signals
 
 
-def rotate_mri(volume, movement_offsets, upscale=False, upscalefactor=6):
+def affine_transform(volume, movement_offsets, upscalefactor=6, printtimes=False):
     
+    """
+    Applies affine transform to MRI volume given rotation and traslation offsets
+
+    Inputs:
+    - volume : original MRI volume, matrix of shape x by y by z
+    - movement_offsets : movement offsets, array of shape 6 (3 rotation and 3 traslation)
+    - upscalefactor : factor to which upscale image, int, upscalefactor == 1 means no upscaling; default = 6
+    - printtimes : bool, whether to print times for each operation (upscaling, transform, downscaling); default = False
+    
+    Outputs:
+    - trans_volume : transformed volume, matrix of shape x by y by z
+    """
+
     tstart = time.time()
     
     # Upsample volume
-    if upscale:
+    if upscalefactor != 1:
         volume = zoom(volume, upscalefactor, mode='nearest', order=0)
     tupscale = time.time() - tstart
 
@@ -72,18 +103,38 @@ def rotate_mri(volume, movement_offsets, upscale=False, upscalefactor=6):
     ttransform = time.time() - tupscale
 
     # Scale down to original resolution
-    if upscale:
+    if upscalefactor != 1:
         trans_volume = zoom(trans_volume, 1/upscalefactor, mode='nearest', order=0)
     tdownscale = time.time() - ttransform
 
-    print('Time to upscale:{}s \nTime to transform:{}s \nTime to downscale:{}s'.format(tupscale, ttransform, tdownscale))
+    if printtimes:
+        print('Time to upscale:{}s \nTime to transform:{}s \nTime to downscale:{}s'.format(tupscale, ttransform, tdownscale))
     
     return trans_volume
 
 
-def plot_transform(original, transformed, off, x=64,y=64,s=19, save=None):
+def plot_transform(original, transformed, off, xyz=(64, 64, 19), save=None, cross=True):
     
-    fig, axs = plt.subplots(3,2, gridspec_kw=dict(height_ratios=[128/38, 1, 1], width_ratios=[1,1]))#  sharex=True, sharey=False)
+    """
+    Plots 3d view of original and transformed MRI volumes
+
+    Inputs:
+    - original : matrix of shape x by y by s
+    - transformed : matrix of shape x by y by s (output of affine_transform)
+    - off : movement offsets, array of shape 6 (3 rotation and 3 traslation)
+    - xyz : tuple of len=3 indicating slices to show; default = (64, 64, 19)
+    - save : filename to save figure, if want to save; default = None
+    - cross : whether to add crosses indicating slices; default = True
+    
+    Outputs:
+    - saves or shows figure
+    """
+    
+    # Get slice coords
+    x,y,s = xyz
+    
+    # Create figure with 6 subplots
+    fig, axs = plt.subplots(3,2, gridspec_kw=dict(height_ratios=[128/38, 1, 1], width_ratios=[1,1]),  sharex=True, sharey=False)
     
     # Axial
     axs[0,0].imshow(original[:,:,s])
@@ -100,60 +151,68 @@ def plot_transform(original, transformed, off, x=64,y=64,s=19, save=None):
     # Invert axes
     for ax in fig.axes:
         ax.invert_yaxis()
+    
+    # Add crosses
+    if cross:
+        axs[0,0].axvline(y, lw=0.5, ls='--', color='r')
+        axs[0,1].axvline(y, lw=0.5, ls='--', color='r')
+        axs[0,0].axhline(x, lw=0.5, ls='--', color='r')
+        axs[0,1].axhline(x, lw=0.5, ls='--', color='r')
+
+        axs[1,0].axvline(y, lw=0.5, ls='--', color='r')
+        axs[1,1].axvline(y, lw=0.5, ls='--', color='r')
+        axs[1,0].axhline(s, lw=0.5, ls='--', color='r')
+        axs[1,1].axhline(s, lw=0.5, ls='--', color='r')
+
+        axs[2,0].axvline(x, lw=0.5, ls='--', color='r')
+        axs[2,1].axvline(x, lw=0.5, ls='--', color='r')
+        axs[2,0].axhline(s, lw=0.5, ls='--', color='r')
+        axs[2,1].axhline(s, lw=0.5, ls='--', color='r')
 
     # Add Titles
-    axs[0,0].set_title('Original Volume')
-    axs[0,1].set_title('Transformed Volume')
+    axs[0,0].set_title('Original Volume', fontsize=12)
+    axs[0,1].set_title('Transformed Volume', fontsize=12)
 
     axs[0,0].set_ylabel('Axial \n(z={})'.format(s))
     axs[1,0].set_ylabel('Sagittal \n(x={})'.format(x))
     axs[2,0].set_ylabel('Coronal \n(y={})'.format(y))
 
-    
     # Add transformation parameters
-    plt.text(0.01, 0.99, 
-             'trans x={} \ntrans y={} \ntrans z={} \npitch={} \nroll={} \nyaw={}'.format(off[3], off[4], off[5], off[0], off[1], off[2]),
-        verticalalignment='top', horizontalalignment='left',
-        transform=plt.gcf().transFigure,
-        color='k', fontsize=10)
+    off = [round(c,3) for c in movement_offsets]
+    plt.text(0.01, 0.99,
+             'traslation:\nx={}  y={}  z={}'.format(off[3], off[4], off[5]),
+             verticalalignment='top', horizontalalignment='left',
+             transform=plt.gcf().transFigure,
+             color='purple', fontsize=9)
     
+    plt.text(0.51, 0.99,
+             'rotation:\npitch={}  roll={}  yaw={}'.format(off[0], off[1], off[2]),
+             verticalalignment='top', horizontalalignment='left',
+             transform=plt.gcf().transFigure,
+             color='green', fontsize=9)
 
+    # Save
     if save:
         plt.savefig(save)
     else:
         plt.show()
 
+
+
 if __name__ == '__main__':
 
     nTRs = 260
-    scaling = np.concatenate(((np.random.randn(3)/10), (np.random.randn(3)/3)), 0)
-    window_size = 3
-    movement_offsets = generate_movement_regressors(nTRs, scaling, window_size)[0,:]
-   #     movement_offsets = np.array([0,0,0, 0, 0, 10])
-    
+   
     data = image.load_img('data/simulazione_datasets/run1_template.nii')
-    data_map = data.get_fdata()
-    data_map = data_map.astype('float32')
+    data_map = data.get_fdata().astype('float32')
     
     original = data_map[:,:,:,0]
-    transformed = rotate_mri(original, movement_offsets)
+
+    movement_offsets = get_movement_offsets(nTRs)[0,:]*100
+    transformed = affine_transform(original, movement_offsets, printtimes=True)
     
-    plot_transform(original, transformed, movement_offsets, 50,50,15, 'prova')
+    plot_transform(original, transformed, movement_offsets, save='data/simulazione_results/motion')
 
-
-    sl = 19
-    xx = 64
-    yy = 64
-
-    fig, axs = plt.subplots(3,2)
-    axs[0,0].imshow(final[:,:,sl])
-    axs[0,1].imshow(data_map[:,:,sl,0])
-
-    axs[1,0].imshow(final[xx,:,:])
-    axs[1,1].imshow(data_map[xx,:,:,0])
-
-    axs[2,0].imshow(final[:,yy,:])
-    axs[2,1].imshow(data_map[:,yy,:,0])
     
     print('d')
 
