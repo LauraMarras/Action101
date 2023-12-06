@@ -247,7 +247,7 @@ if __name__ == '__main__':
 
     orig_stdout = sys.stdout
     f = open('data/simulazione_results/out_2.txt', 'w')
-    sys.stdout = Tee(sys.stdout, f)
+    sys.stdout = f
 
     tstart = time.time()
     
