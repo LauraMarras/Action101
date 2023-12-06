@@ -201,7 +201,7 @@ def plot_transform(original, transformed, off, xyz=(64, 64, 19), save=None, cros
 if __name__ == '__main__':
 
     orig_stdout = sys.stdout
-    f = open('out.txt', 'w')
+    f = open('data/simulazione_results/out.txt', 'w')
     sys.stdout = f
 
     tstart = time.time()
@@ -275,13 +275,14 @@ if __name__ == '__main__':
     idx=0
     for r, run_len in enumerate(run_cuts):
         run_idx = [*range(idx, run_len+idx)]
-        
+        fnamer = ''
+
         # Get data of single run 
         data_run = data_signal[:,:,:,run_idx]
 
         # Generate Trend (for each run separately)
         if add_trend:
-            fname+='_trend'
+            fnamer+='_trend'
             trend = np.zeros((x, y, slices, run_len))
             for i in range(x):
                 for j in range(y):
@@ -304,7 +305,7 @@ if __name__ == '__main__':
     
         # Add motion
         if add_motion:
-            fname+='_motion'
+            fnamer+='_motion'
             movement_offsets = get_movement_offsets(run_len, SNR_movement)
             run_motion = np.full(run_zscore.shape, np.nan)
             for t in range(run_len):
@@ -314,15 +315,15 @@ if __name__ == '__main__':
             
         # Save data
             if save:
-                fname+='_run{}'.format(r+1)
+                fnamer+='_run{}'.format(r+1)
                 image_final = image.new_img_like(data, run_motion, copy_header=True)
-                image_final.to_filename('data/simulazione_results/{}.nii'.format(fname))
+                image_final.to_filename('data/simulazione_results/{}.nii'.format(fname+fnamer))
 
         else:
             if save:
-                fname+='_run{}'.format(r+1)
+                fnamer+='_run{}'.format(r+1)
                 image_final = image.new_img_like(data, run_zscore, copy_header=True)
-                image_final.to_filename('data/simulazione_results/{}.nii'.format(fname))
+                image_final.to_filename('data/simulazione_results/{}.nii'.format(fname+fnamer))
         
         idx+=run_len
 
