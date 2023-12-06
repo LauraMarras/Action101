@@ -8,6 +8,39 @@ import time
 from matplotlib import pyplot as plt
 import sys
 
+from motion_regressors import get_motion_offsets_data
+
+def convolve_HRF(fMRI, tr=2, hrf_p=8.6, hrf_q=0.547, dur=12):
+    
+    """
+    Convolve each column of matrix with a HRF 
+    
+    Inputs:
+    - model_df : dataframe of full group model
+    - tr : sampling interval in seconds (fMRI TR)
+    - hrf_p : parameter of HRF
+    - hrf_q : parameter of HRF
+    - dur : duration of HRF, in seconds
+
+    Outputs:
+    - group_convolved : dataframe of full group model convolved
+    """
+
+    # Define HRF
+    hrf_t = np.arange(0, dur+0.005, tr)  # A typical HRF lasts 12 secs
+    hrf = (hrf_t / (hrf_p * hrf_q)) ** hrf_p * np.exp(hrf_p - hrf_t / hrf_q)
+
+    # Initialize matrix to save result
+    fMRIconv = np.full(fMRI.shape, np.nan)
+
+    # Iterate over dimensions
+    for x in range(fMRI.shape[0]):
+        for y in range(fMRI.shape[1]):
+            for z in range(fMRI.shape[2]):
+                fMRIconv[x,y,z,:] = np.convolve(fMRI[x,y,z,:], hrf, mode='full')[:fMRI.shape[3]] # cut last part
+    
+    return fMRIconv
+
 def get_movement_offsets(nTRs, SNR, dims=3, window_size=3, seed=0):
     
     """
@@ -201,7 +234,7 @@ def plot_transform(original, transformed, off, xyz=(64, 64, 19), save=None, cros
 if __name__ == '__main__':
 
     orig_stdout = sys.stdout
-    f = open('data/simulazione_results/out.txt', 'w')
+    f = open('data/simulazione_results/out_2.txt', 'w')
     sys.stdout = f
 
     tstart = time.time()
@@ -217,8 +250,9 @@ if __name__ == '__main__':
     fname='simul'
 
     # Movement parameters
-    movement_upscale = 6
-    SNR_movement = (10, 3)
+    movement_upscale = 1
+    regressors_path = 'data/simulazione_datasets/motionreg/'
+    #SNR_movement = (10, 3)
 
     # Define options
     add_noise = True
@@ -237,6 +271,7 @@ if __name__ == '__main__':
     mask_map = mask.get_fdata()
 
     # Get n_voxels and slices, mean and std
+    dimensions = tuple(data.header._structarr['pixdim'][1:4])
     x,y,slices,_ = data.shape
     data_avg = np.mean(data_map, 3)
     data_std = np.std(data_map, 3, ddof=1)
@@ -267,8 +302,13 @@ if __name__ == '__main__':
     if add_noise:
         fname+='_noise'
         noise = np.random.randn(x, y, slices, n_points)*noise_level
-        data_signal += noise
     
+        # Convolve noise with HRF
+        noise_conv = convolve_HRF(noise, tr=TR)
+
+        # Add to data
+        data_signal += noise_conv
+
     print('Done with: generating and adding noise. It took:    ', time.time() - tstart, '  seconds')
 
     
@@ -306,10 +346,11 @@ if __name__ == '__main__':
         # Add motion
         if add_motion:
             fnamer+='_motion'
-            movement_offsets = get_movement_offsets(run_len, SNR_movement)
+            #movement_offsets = get_movement_offsets(run_len, SNR_movement)
+            movement_offsets = get_motion_offsets_data(run_len, regressors_path, dimensions=dimensions)
             run_motion = np.full(run_zscore.shape, np.nan)
             for t in range(run_len):
-                run_motion[:,:,:, t] = affine_transform(run_zscore[:,:,:,t], movement_offsets[t,:], upscalefactor=movement_upscale, printtimes=True)
+                run_motion[:,:,:, t] = affine_transform(run_zscore[:,:,:,t], movement_offsets[t,:], upscalefactor=movement_upscale, printtimes=False)
             print('Done with: adding motion for run {}. It took:    '.format(r+1), time.time() - tstart, '  seconds')
         
             
@@ -317,13 +358,13 @@ if __name__ == '__main__':
             if save:
                 fnamer+='_run{}'.format(r+1)
                 image_final = image.new_img_like(data, run_motion, copy_header=True)
-                image_final.to_filename('data/simulazione_results/{}.nii'.format(fname+fnamer))
+                image_final.to_filename('data/simulazione_results/{}_2.nii'.format(fname+fnamer))
 
         else:
             if save:
                 fnamer+='_run{}'.format(r+1)
                 image_final = image.new_img_like(data, run_zscore, copy_header=True)
-                image_final.to_filename('data/simulazione_results/{}.nii'.format(fname+fnamer))
+                image_final.to_filename('data/simulazione_results/{}_2.nii'.format(fname+fnamer))
         
         idx+=run_len
 
