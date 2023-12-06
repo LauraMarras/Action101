@@ -87,7 +87,7 @@ def affine_transform(volume, movement_offsets, upscalefactor=6, printtimes=False
 
     # Apply transforms to coordinates
     trans_coords = np.dot(coords, np.linalg.inv(trans_matrix).T)
-    trans_coords = np.delete(trans_coords, 3, axis=3).astype(int)
+    trans_coords = np.delete(np.round(trans_coords), 3, axis=3).astype(int)
 
     # Add padding to original volume
     pad = np.max(np.concatenate((np.abs(np.max(trans_coords, (0,1,2)) - (np.array(trans_coords.shape[:3])-1)), np.abs(np.min(trans_coords, (0,1,2))))))
@@ -260,7 +260,7 @@ if __name__ == '__main__':
     plot_transform(original, transformed, movement_offsets, xyz=(40,30,4), save='data/simulazione_results/motion_t1')
 
     
-    print('d')
+  
 
 
 
