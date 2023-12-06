@@ -231,13 +231,26 @@ def plot_transform(original, transformed, off, xyz=(64, 64, 19), save=None, cros
         plt.show()
 
 
+class Tee(object):
+    def _init_(self, *files):
+        self.files = files
+    def write(self, obj):
+        for f in self.files:
+            f.write(obj)
+            f.flush() # If you want the output to be visible immediately
+    def flush(self) :
+        for f in self.files:
+            f.flush()
+
+
 if __name__ == '__main__':
 
     orig_stdout = sys.stdout
     f = open('data/simulazione_results/out_2.txt', 'w')
-    sys.stdout = f
+    sys.stdout = Tee(sys.stdout, f)
 
     tstart = time.time()
+    
     # Define parameters
     n_points = 1614
     TR = 2
