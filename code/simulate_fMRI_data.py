@@ -331,3 +331,12 @@ if __name__ == '__main__':
     
     sys.stdout = orig_stdout
     f.close()
+
+
+## create function per fare regressori realistici
+# gestire upscaling dentro affine_trnasform
+
+
+# noise ppuro --> convolvere con HRFprima di aggiungere --> usare convolve HRF dando come input matriciona di voxelxtempo
+# fare autocorr di un voxel di GM --> prima e dopo conv, dopo conv dovrebbe venire autocorr di grado 2
+# anche prima e dopo motion

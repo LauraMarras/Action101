@@ -46,7 +46,6 @@ def get_movement_offsets(nTRs, dims=3, window_size=3, seed=0):
     
     return offsets_signals
 
-
 def affine_transform(volume, movement_offsets, upscalefactor=6, printtimes=False):
     
     """
@@ -100,18 +99,17 @@ def affine_transform(volume, movement_offsets, upscalefactor=6, printtimes=False
     z = trans_coords[:,:,:,2] 
 
     trans_volume = volume_padded[x,y,z] 
-    ttransform = time.time() - tupscale
+    ttransform = time.time() - tstart
 
     # Scale down to original resolution
     if upscalefactor != 1:
         trans_volume = zoom(trans_volume, 1/upscalefactor, mode='nearest', order=0)
-    tdownscale = time.time() - ttransform
+    tdownscale = time.time() - tstart
 
     if printtimes:
         print('Time to upscale:{}s \nTime to transform:{}s \nTime to downscale:{}s'.format(tupscale, ttransform, tdownscale))
     
     return trans_volume
-
 
 def plot_transform(original, transformed, off, xyz=(64, 64, 19), save=None, cross=True):
     
@@ -198,7 +196,6 @@ def plot_transform(original, transformed, off, xyz=(64, 64, 19), save=None, cros
         plt.show()
 
 
-
 if __name__ == '__main__':
 
     nTRs = 260
@@ -208,11 +205,15 @@ if __name__ == '__main__':
     
     original = data_map[:,:,:,0]
 
-    movement_offsets = get_movement_offsets(nTRs)[0,:]*100
-    transformed = affine_transform(original, movement_offsets, printtimes=True)
+    movement_offsets = get_movement_offsets(nTRs)[0,:]
+    #movement_offsets = [0,0,90, 0,0,0]
+    transformed = affine_transform(original, movement_offsets, upscalefactor=1, printtimes=True)
     
     plot_transform(original, transformed, movement_offsets, save='data/simulazione_results/motion')
 
     
     print('d')
 
+
+
+#
