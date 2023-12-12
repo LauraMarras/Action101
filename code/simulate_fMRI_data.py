@@ -237,12 +237,12 @@ if __name__ == '__main__':
     movement_upscale = 1
     regressors_path = 'data/simulazione_datasets/motionreg/'
     
-    np.random.seed(0)
+    np.random.seed(0) ### da mettere prima di for loop per soggetti
     #SNR_movement = (10, 3)
 
     # Define options
     add_noise = True
-    add_trend = False
+    add_trend = True
     add_motion = True
     save = True
 
@@ -345,13 +345,13 @@ if __name__ == '__main__':
             if save:
                 fnamer+='_run{}'.format(r+1)
                 image_final = image.new_img_like(data, run_motion, copy_header=False)
-                image_final.to_filename('data/simulazione_results/{}_scipy.nii'.format(fname+fnamer))
+                image_final.to_filename('data/simulazione_results/{}_3.nii'.format(fname+fnamer))
 
         else:
             if save:
                 fnamer+='_run{}'.format(r+1)
                 image_final = image.new_img_like(data, run_zscore, copy_header=False)
-                image_final.to_filename('data/simulazione_results/{}_scipy.nii'.format(fname+fnamer))
+                image_final.to_filename('data/simulazione_results/{}_3.nii'.format(fname+fnamer))
         
         idx+=run_len
 
@@ -359,8 +359,3 @@ if __name__ == '__main__':
     
     sys.stdout = orig_stdout
     f.close()
-
-
-
-# adjust seed in motion
-# add seed for noise
