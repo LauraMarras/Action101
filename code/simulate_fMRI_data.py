@@ -230,12 +230,14 @@ if __name__ == '__main__':
     noise_level = 4
     run_cuts = (np.array([536,450,640,650,472,480])/TR).astype('int')
     poly_deg = 1 + round(TR*(run_cuts.sum()/len(run_cuts))/150)
-
+    
     fname='simul'
 
     # Movement parameters
     movement_upscale = 1
     regressors_path = 'data/simulazione_datasets/motionreg/'
+    
+    np.random.seed(0)
     #SNR_movement = (10, 3)
 
     # Define options
