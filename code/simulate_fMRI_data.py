@@ -217,7 +217,7 @@ def plot_transform(original, transformed, off, xyz=(64, 64, 19), save=None, cros
 if __name__ == '__main__':
 
     orig_stdout = sys.stdout
-    f = open('data/simulazione_results/out_2.txt', 'w')
+    f = open('data/simulazione_results/out_3.txt', 'w')
     sys.stdout = f
 
     tstart = time.time()
@@ -299,7 +299,7 @@ if __name__ == '__main__':
 
     
     idx=0
-    for r, run_len in enumerate(run_cuts):
+    for r, run_len in enumerate(run_cuts[:1]):
         run_idx = [*range(idx, run_len+idx)]
         fnamer = ''
 
@@ -338,7 +338,6 @@ if __name__ == '__main__':
             for t in range(run_len):
                 run_motion[:,:,:, t] = affine_transformation(run_zscore[:,:,:,t], movement_offsets, upscalefactor=movement_upscale, printtimes=False)
                 
-
             print('Done with: adding motion for run {}. It took:    '.format(r+1), time.time() - tstart, '  seconds')
         
             
@@ -346,13 +345,13 @@ if __name__ == '__main__':
             if save:
                 fnamer+='_run{}'.format(r+1)
                 image_final = image.new_img_like(data, run_motion, copy_header=False)
-                image_final.to_filename('data/simulazione_results/{}_3.nii'.format(fname+fnamer))
+                image_final.to_filename('data/simulazione_results/{}_4.nii'.format(fname+fnamer))
 
         else:
             if save:
                 fnamer+='_run{}'.format(r+1)
                 image_final = image.new_img_like(data, run_zscore, copy_header=False)
-                image_final.to_filename('data/simulazione_results/{}_3.nii'.format(fname+fnamer))
+                image_final.to_filename('data/simulazione_results/{}_4.nii'.format(fname+fnamer))
         
         idx+=run_len
 
