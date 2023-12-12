@@ -197,10 +197,10 @@ def plot_transform(original, transformed, off, xyz=(64, 64, 19), save=None, cros
         plt.show()
 
 
-def get_motion_offsets_data(nTRs, path_reg, dimensions=(2,2,3), seed=0):
+def get_motion_offsets_data(nTRs, path_reg, dimensions=(2,2,3)):
     #tstart = time.time()
     # Set seed
-    np.random.seed(seed)
+    
 
     sublist = os.listdir(path_reg)
 
