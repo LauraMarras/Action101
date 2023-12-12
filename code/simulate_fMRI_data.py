@@ -344,7 +344,7 @@ if __name__ == '__main__':
         # Save data
             if save:
                 fnamer+='_run{}'.format(r+1)
-                image_final = image.new_img_like(data, run_motion, affine=data.affine, copy_header=False)
+                image_final = image.new_img_like(data, run_motion, affine=data.affine, copy_header=True)
                 image_final.header._structarr['slice_duration'] = TR
                 image_final.header._structarr['pixdim'][4] = TR
                 
@@ -353,7 +353,9 @@ if __name__ == '__main__':
         else:
             if save:
                 fnamer+='_run{}'.format(r+1)
-                image_final = image.new_img_like(data, run_zscore, affine=data.affine, copy_header=False)
+                image_final = image.new_img_like(data, run_zscore, affine=data.affine, copy_header=True)
+                image_final.header._structarr['slice_duration'] = TR
+                image_final.header._structarr['pixdim'][4] = TR
                 image_final.to_filename('data/simulazione_results/{}_4.nii'.format(fname+fnamer))
         
         idx+=run_len
