@@ -336,7 +336,7 @@ if __name__ == '__main__':
             run_motion = np.full(run_zscore.shape, np.nan)
 
             for t in range(run_len):
-                run_motion[:,:,:, t] = affine_transformation(run_zscore[:,:,:,t], movement_offsets, upscalefactor=movement_upscale, printtimes=False)
+                run_motion[:,:,:, t] = affine_transformation(run_zscore[:,:,:,t], movement_offsets[t,:], upscalefactor=movement_upscale, printtimes=False)
                 
             print('Done with: adding motion for run {}. It took:    '.format(r+1), time.time() - tstart, '  seconds')
         
