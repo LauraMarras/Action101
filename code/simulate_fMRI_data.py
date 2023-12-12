@@ -104,9 +104,9 @@ def affine_transformation(volume, movement_offsets, upscalefactor=6, printtimes=
     tupscale = time.time() - tstart
 
     # Create rotation, shift and translation matrices
-    angles = np.radians(movement_offsets[:3])
+    angles = -np.radians(np.array([movement_offsets[1], movement_offsets[2], movement_offsets[0]]))
     shift = -np.array(volume.shape)/2 # shift to move origin to the center
-    displacement = movement_offsets[3:]
+    displacement = np.array([movement_offsets[4], movement_offsets[5], movement_offsets[3]])
     
     r = transform.SimilarityTransform(rotation=angles, dimensionality=3)
     s = transform.SimilarityTransform(translation=shift, dimensionality=3)
@@ -194,7 +194,7 @@ def plot_transform(original, transformed, off, xyz=(64, 64, 19), save=None, cros
     axs[2,0].set_ylabel('Coronal \n(y={})'.format(y))
 
     # Add transformation parameters
-    off = [round(c,3) for c in movement_offsets]
+    off = np.round(off,3)
     plt.text(0.01, 0.99,
              'traslation:\nx={}  y={}  z={}'.format(off[3], off[4], off[5]),
              verticalalignment='top', horizontalalignment='left',
@@ -322,13 +322,13 @@ if __name__ == '__main__':
             
     
         # Zscore
-        run_zscore = np.full(data_run.shape, np.nan)
         run_zscore = zscore((data_run), 3)        
         for t in range(run_len):
             run_zscore[:,:,:,t] = run_zscore[:,:,:,t]*data_std + data_avg
         
         print('Done with: zscoring for run {}. It took:    '.format(r+1), time.time() - tstart, '  seconds')
-    
+
+        
         # Add motion
         if add_motion:
             fnamer+='_motion'
@@ -336,8 +336,9 @@ if __name__ == '__main__':
             run_motion = np.full(run_zscore.shape, np.nan)
 
             for t in range(run_len):
-                run_motion[:,:,:, t] = affine_transformation(run_zscore[:,:,:,t], movement_offsets[t,:], upscalefactor=movement_upscale, printtimes=False)
-            
+                run_motion[:,:,:, t] = affine_transformation(run_zscore[:,:,:,t], movement_offsets, upscalefactor=movement_upscale, printtimes=False)
+                
+
             print('Done with: adding motion for run {}. It took:    '.format(r+1), time.time() - tstart, '  seconds')
         
             
