@@ -1,7 +1,7 @@
 import numpy as np
 from nilearn import image
 from scipy.stats import zscore
-from scipy.ndimage import zoom
+from scipy.ndimage import zoom, affine_transform
 from skimage import transform
 import pandas as pd
 import time
@@ -81,7 +81,7 @@ def get_movement_offsets(nTRs, SNR, dims=3, window_size=3, seed=0):
     
     return offsets_signals
 
-def affine_transform(volume, movement_offsets, upscalefactor=6, printtimes=False):
+def affine_transformation(volume, movement_offsets, upscalefactor=6, printtimes=False):
     
     """
     Applies affine transform to MRI volume given rotation and traslation offsets
@@ -103,43 +103,26 @@ def affine_transform(volume, movement_offsets, upscalefactor=6, printtimes=False
         volume = zoom(volume, upscalefactor, mode='nearest', order=0)
     tupscale = time.time() - tstart
 
-    # Get volume coordinates 
-    coords = np.rollaxis(np.indices(volume.shape), 0, 1+volume.ndim)
-    coords = np.append(coords, np.ones((coords.shape[0], coords.shape[1], coords.shape[2], 1)), axis=3) # Add 1s to match shape for multiplication
-    
     # Create rotation, shift and translation matrices
     angles = np.radians(movement_offsets[:3])
-    shift = - np.array(volume.shape)/2 # shift to move origin to the center
+    shift = -np.array(volume.shape)/2 # shift to move origin to the center
     displacement = movement_offsets[3:]
-
+    
     r = transform.SimilarityTransform(rotation=angles, dimensionality=3)
     s = transform.SimilarityTransform(translation=shift, dimensionality=3)
     t = transform.SimilarityTransform(translation=displacement, dimensionality=3)
     
     # Compose transforms by multiplying their matrices (mind the order of the operations)
     trans_matrix = t.params @ np.linalg.inv(s.params) @ r.params @ s.params
-
-    # Apply transforms to coordinates
-    trans_coords = np.dot(coords, np.linalg.inv(trans_matrix).T)
-    trans_coords = np.delete(trans_coords, 3, axis=3).astype(int)
-
-    # Add padding to original volume
-    pad = np.max(np.concatenate((np.abs(np.max(trans_coords, (0,1,2)) - (np.array(trans_coords.shape[:3])-1)), np.abs(np.min(trans_coords, (0,1,2))))))
-    volume_padded = np.pad(volume, pad, mode='constant')
-    trans_coords = trans_coords+pad
-    
-    # Map from original to transformed volume through transformed coordinates
-    x = trans_coords[:,:,:,0]
-    y = trans_coords[:,:,:,1]
-    z = trans_coords[:,:,:,2] 
-
-    trans_volume = volume_padded[x,y,z] 
-    ttransform = time.time() - tupscale
+   
+    # Apply affine transform
+    trans_volume = affine_transform(volume, np.linalg.inv(trans_matrix))
+    ttransform = time.time() - tstart - tupscale
 
     # Scale down to original resolution
     if upscalefactor != 1:
         trans_volume = zoom(trans_volume, 1/upscalefactor, mode='nearest', order=0)
-    tdownscale = time.time() - ttransform
+    tdownscale = time.time() - tstart - ttransform
 
     if printtimes:
         print('Time to upscale:{}s \nTime to transform:{}s \nTime to downscale:{}s'.format(tupscale, ttransform, tdownscale))
@@ -231,18 +214,6 @@ def plot_transform(original, transformed, off, xyz=(64, 64, 19), save=None, cros
         plt.show()
 
 
-class Tee(object):
-    def _init_(self, *files):
-        self.files = files
-    def write(self, obj):
-        for f in self.files:
-            f.write(obj)
-            f.flush() # If you want the output to be visible immediately
-    def flush(self) :
-        for f in self.files:
-            f.flush()
-
-
 if __name__ == '__main__':
 
     orig_stdout = sys.stdout
@@ -269,7 +240,7 @@ if __name__ == '__main__':
 
     # Define options
     add_noise = True
-    add_trend = True
+    add_trend = False
     add_motion = True
     save = True
 
@@ -359,25 +330,26 @@ if __name__ == '__main__':
         # Add motion
         if add_motion:
             fnamer+='_motion'
-            #movement_offsets = get_movement_offsets(run_len, SNR_movement)
             movement_offsets = get_motion_offsets_data(run_len, regressors_path, dimensions=dimensions)
             run_motion = np.full(run_zscore.shape, np.nan)
+
             for t in range(run_len):
-                run_motion[:,:,:, t] = affine_transform(run_zscore[:,:,:,t], movement_offsets[t,:], upscalefactor=movement_upscale, printtimes=False)
+                run_motion[:,:,:, t] = affine_transformation(run_zscore[:,:,:,t], movement_offsets[t,:], upscalefactor=movement_upscale, printtimes=False)
+            
             print('Done with: adding motion for run {}. It took:    '.format(r+1), time.time() - tstart, '  seconds')
         
             
         # Save data
             if save:
                 fnamer+='_run{}'.format(r+1)
-                image_final = image.new_img_like(data, run_motion, copy_header=True)
-                image_final.to_filename('data/simulazione_results/{}_2.nii'.format(fname+fnamer))
+                image_final = image.new_img_like(data, run_motion, copy_header=False)
+                image_final.to_filename('data/simulazione_results/{}_scipy.nii'.format(fname+fnamer))
 
         else:
             if save:
                 fnamer+='_run{}'.format(r+1)
-                image_final = image.new_img_like(data, run_zscore, copy_header=True)
-                image_final.to_filename('data/simulazione_results/{}_2.nii'.format(fname+fnamer))
+                image_final = image.new_img_like(data, run_zscore, copy_header=False)
+                image_final.to_filename('data/simulazione_results/{}_scipy.nii'.format(fname+fnamer))
         
         idx+=run_len
 
@@ -387,10 +359,6 @@ if __name__ == '__main__':
     f.close()
 
 
-## create function per fare regressori realistici
-# gestire upscaling dentro affine_trnasform
 
-
-# noise ppuro --> convolvere con HRFprima di aggiungere --> usare convolve HRF dando come input matriciona di voxelxtempo
-# fare autocorr di un voxel di GM --> prima e dopo conv, dopo conv dovrebbe venire autocorr di grado 2
-# anche prima e dopo motion
+# adjust seed in motion
+# add seed for noise
