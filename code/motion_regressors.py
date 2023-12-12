@@ -198,22 +198,22 @@ def plot_transform(original, transformed, off, xyz=(64, 64, 19), save=None, cros
 
 
 def get_motion_offsets_data(nTRs, path_reg, dimensions=(2,2,3)):
-    #tstart = time.time()
-    # Set seed
     
-
+    # Load movement regressors of real subjects
     sublist = os.listdir(path_reg)
 
+    # Randomly pick 3 subjects
     subs = np.random.randint(0, len(sublist), 3)
+
+    # Initialize offset array
     offset_signals = np.full((nTRs, len(dimensions)*2), np.nan)
 
+    # 
     temp = nTRs
     c = 0
     for s in subs:
-        #tsub = time.time()
         sub = np.genfromtxt(path_reg + sublist[s] + '/derivatives/rest_mocopar.1D')
         idx = np.min((temp, sub.shape[0]))
-        #tload = time.time() - tsub
 
         sub = sub - sub[0,:]         
 
@@ -229,21 +229,18 @@ def get_motion_offsets_data(nTRs, path_reg, dimensions=(2,2,3)):
 
         if temp <= 0:
             break
-        #tassign = time.time() - tload -tstart
-
-        #print('time to load {} \ntime to assign {}'.format(tload, tassign))
     
     # scale
     offset_signals = offset_signals / np.array([1,1,1, dimensions[0], dimensions[1], dimensions[2]])
-    #tscale = time.time() - tassign
-    #print('time to scale {}'.format(tscale))
     return offset_signals
 
 
 
 if __name__ == '__main__':
 
-    nTRs = 260
+    np.random.seed(0) 
+        
+    nTRs = 268
    
     data = image.load_img('data/simulazione_datasets/run1_template.nii')
     
@@ -253,16 +250,17 @@ if __name__ == '__main__':
     
     original = data_map[:,:,:,0]
     
-    movement_offsets = get_motion_offsets_data(nTRs, 'data/simulazione_datasets/motionreg/')[153,:]
+    movement_offsets = get_motion_offsets_data(nTRs, 'data/simulazione_datasets/motionreg/')
+    np.savetxt('data/simulazione_results/movement_offsrun1.1D', movement_offsets, delimiter=' ')
 
     #movement_offsets = get_movement_offsets(nTRs)[0,:]
     #movement_offsets = [0,0,90, 5,5,5]
-    transformed = affine_transform(original, movement_offsets, upscalefactor=1, printtimes=True)
+    # transformed = affine_transform(original, movement_offsets, upscalefactor=1, printtimes=True)
     
-    movement_offsets2 = get_motion_offsets_data(nTRs, 'data/simulazione_datasets/motionreg/')[152,:]
-    transformed2 = affine_transform(original, movement_offsets2, upscalefactor=1, printtimes=True)
+    # movement_offsets2 = get_motion_offsets_data(nTRs, 'data/simulazione_datasets/motionreg/')[152,:]
+    # transformed2 = affine_transform(original, movement_offsets2, upscalefactor=1, printtimes=True)
     
-    plot_transform(transformed2, transformed, movement_offsets, save='data/simulazione_results/motion_t2')
+    # plot_transform(transformed2, transformed, movement_offsets, save='data/simulazione_results/motion_t2')
 
     print('d')
   
