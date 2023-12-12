@@ -215,6 +215,8 @@ def get_motion_offsets_data(nTRs, path_reg, dimensions=(2,2,3), seed=0):
         idx = np.min((temp, sub.shape[0]))
         #tload = time.time() - tsub
 
+        sub = sub - sub[0,:]         
+
         if c > 0:
             lastrow = offset_signals[c-1,:]
             offset_signals[c:idx+c, :] = sub[:idx,:] +lastrow
@@ -251,15 +253,18 @@ if __name__ == '__main__':
     
     original = data_map[:,:,:,0]
     
-    movement_offsets = get_motion_offsets_data(nTRs, 'data/simulazione_datasets/motionreg/')[100,:]
+    movement_offsets = get_motion_offsets_data(nTRs, 'data/simulazione_datasets/motionreg/')[153,:]
 
     #movement_offsets = get_movement_offsets(nTRs)[0,:]
-    #movement_offsets = [0,0,90, 0,0,0]
+    #movement_offsets = [0,0,90, 5,5,5]
     transformed = affine_transform(original, movement_offsets, upscalefactor=1, printtimes=True)
     
-    plot_transform(original, transformed, movement_offsets, xyz=(40,30,4), save='data/simulazione_results/motion_t1')
-
+    movement_offsets2 = get_motion_offsets_data(nTRs, 'data/simulazione_datasets/motionreg/')[152,:]
+    transformed2 = affine_transform(original, movement_offsets2, upscalefactor=1, printtimes=True)
     
+    plot_transform(transformed2, transformed, movement_offsets, save='data/simulazione_results/motion_t2')
+
+    print('d')
   
 
 
