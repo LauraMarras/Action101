@@ -242,7 +242,7 @@ if __name__ == '__main__':
 
     # Define options
     add_noise = True
-    add_trend = True
+    add_trend = False
     add_motion = True
     save = True
 
@@ -345,7 +345,7 @@ if __name__ == '__main__':
             if save:
                 fnamer+='_run{}'.format(r+1)
                 image_final = image.new_img_like(data, run_motion, affine=data.affine, copy_header=False)
-                proimage_finalva.header._structarr['slice_duration'] = TR
+                image_final.header._structarr['slice_duration'] = TR
                 image_final.header._structarr['pixdim'][4] = TR
                 
                 image_final.to_filename('data/simulazione_results/{}_4.nii'.format(fname+fnamer))
