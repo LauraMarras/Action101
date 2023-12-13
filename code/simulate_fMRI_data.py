@@ -216,8 +216,16 @@ def plot_transform(original, transformed, off, xyz=(64, 64, 19), save=None, cros
 
 if __name__ == '__main__':
 
+    
+    # Define options
+    add_noise = True
+    add_trend = True
+    add_motion = True
+    save = True
+    trialn= '_4'
+
     orig_stdout = sys.stdout
-    f = open('data/simulazione_results/out_4.txt', 'w')
+    f = open('data/simulazione_results/logs/out{}.txt'.format(trialn), 'w')
     sys.stdout = f
 
     tstart = time.time()
@@ -242,12 +250,6 @@ if __name__ == '__main__':
     n_subs = 10
     seed_mat = np.reshape(np.arange(0,(n_runs+1)*n_subs), (n_subs,n_runs+1)) 
     ### da mettere prima di for loop per soggetti
-
-    # Define options
-    add_noise = True
-    add_trend = True
-    add_motion = True
-    save = True
 
     # Sub loop
     sub = 0 
@@ -359,18 +361,22 @@ if __name__ == '__main__':
         # Save data
             if save:
                 fnamer+='_run{}'.format(r+1)
-                image_final = image.new_img_like(data, run_motion, affine=data.affine, copy_header=True)
-                image_final.to_filename('data/simulazione_results/{}_4.nii'.format(fname+fnamer))
+                image_final = image.new_img_like(data, run_motion, affine = data.affine, copy_header=True)
+                image_final.header._structarr['slice_duration'] = TR
+                image_final.header._structarr['pixdim'][4] = TR
+                image_final.to_filename('data/simulazione_results/fmri/{}{}.nii'.format(fname+fnamer, trialn))
 
                 # Save movemet offsets
-                np.savetxt('data/simulazione_results/movement_offs_run{}.1D'.format(r+1), movement_offsets, delimiter=' ')
+                np.savetxt('data/simulazione_results/motionreg/movement_offs_run{}{}.1D'.format(r+1, trialn), movement_offsets, delimiter=' ')
             
 
         else:
             if save:
                 fnamer+='_run{}'.format(r+1)
-                image_final = image.new_img_like(data, run_zscore, copy_header=True)
-                image_final.to_filename('data/simulazione_results/{}_4.nii'.format(fname+fnamer))
+                image_final = image.new_img_like(data, run_zscore, affine=data.affine, copy_header=True)
+                image_final.header._structarr['slice_duration'] = TR
+                image_final.header._structarr['pixdim'][4] = TR
+                image_final.to_filename('data/simulazione_results/fmri/{}{}.nii'.format(fname+fnamer, trialn))
         
         idx+=run_len
 
