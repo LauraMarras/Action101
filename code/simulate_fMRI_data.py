@@ -217,7 +217,7 @@ def plot_transform(original, transformed, off, xyz=(64, 64, 19), save=None, cros
 if __name__ == '__main__':
 
     orig_stdout = sys.stdout
-    f = open('data/simulazione_results/out_3.txt', 'w')
+    f = open('data/simulazione_results/out_4.txt', 'w')
     sys.stdout = f
 
     tstart = time.time()
@@ -242,15 +242,14 @@ if __name__ == '__main__':
     n_subs = 10
     seed_mat = np.reshape(np.arange(0,(n_runs+1)*n_subs), (n_subs,n_runs+1)) 
     ### da mettere prima di for loop per soggetti
-    #SNR_movement = (10, 3)
 
     # Define options
     add_noise = True
-    add_trend = False
+    add_trend = True
     add_motion = True
     save = True
 
-   # Sub loop
+    # Sub loop
     sub = 0 
 
     # Load task data
@@ -293,8 +292,12 @@ if __name__ == '__main__':
 
     # Generate Noise
     if add_noise:
-        np.random.seed(seed_mat[sub,-1])
         fname+='_noise'
+        
+        # Set seed
+        np.random.seed(seed_mat[sub,-1])
+
+        # Create gaussian noise
         noise = np.random.randn(x, y, slices, n_points)*noise_level
     
         # Convolve noise with HRF
@@ -307,13 +310,14 @@ if __name__ == '__main__':
 
     
     idx=0
-    for r, run_len in enumerate(run_cuts[:1]):
-       # Set seed 
+    for r, run_len in enumerate(run_cuts):
+        fnamer = ''
+
+        # Set seed 
         np.random.seed(seed_mat[sub,r])
 
         run_idx = [*range(idx, run_len+idx)]
-        fnamer = ''
-
+        
         # Get data of single run 
         data_run = data_signal[:,:,:,run_idx]
 
@@ -348,7 +352,7 @@ if __name__ == '__main__':
 
             for t in range(run_len):
                 run_motion[:,:,:, t] = affine_transformation(run_zscore[:,:,:,t], movement_offsets[t,:], upscalefactor=movement_upscale, printtimes=False)
-                
+            
             print('Done with: adding motion for run {}. It took:    '.format(r+1), time.time() - tstart, '  seconds')
         
             
@@ -356,13 +360,20 @@ if __name__ == '__main__':
             if save:
                 fnamer+='_run{}'.format(r+1)
                 image_final = image.new_img_like(data, run_motion, affine=data.affine, copy_header=True)
-                
+                image_final.header._structarr['slice_duration'] = TR
+                image_final.header._structarr['pixdim'][4] = TR
                 image_final.to_filename('data/simulazione_results/{}_4.nii'.format(fname+fnamer))
+
+                # Save movemet offsets
+                np.savetxt('data/simulazione_results/movement_offs_run{}.1D'.format(r+1), movement_offsets, delimiter=' ')
+            
 
         else:
             if save:
                 fnamer+='_run{}'.format(r+1)
                 image_final = image.new_img_like(data, run_zscore, copy_header=True)
+                image_final.header._structarr['slice_duration'] = TR
+                image_final.header._structarr['pixdim'][4] = TR
                 image_final.to_filename('data/simulazione_results/{}_4.nii'.format(fname+fnamer))
         
         idx+=run_len
