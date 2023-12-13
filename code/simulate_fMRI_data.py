@@ -106,7 +106,7 @@ def affine_transformation(volume, movement_offsets, upscalefactor=6, printtimes=
     # Create rotation, shift and translation matrices
     angles = -np.radians(np.array([movement_offsets[1], movement_offsets[2], movement_offsets[0]]))
     shift = -np.array(volume.shape)/2 # shift to move origin to the center
-    displacement = np.array([movement_offsets[4], movement_offsets[5], movement_offsets[3]])
+    displacement = -np.array([movement_offsets[4], movement_offsets[5], movement_offsets[3]])
     
     r = transform.SimilarityTransform(rotation=angles, dimensionality=3)
     s = transform.SimilarityTransform(translation=shift, dimensionality=3)
@@ -222,7 +222,7 @@ if __name__ == '__main__':
     add_trend = True
     add_motion = True
     save = True
-    trialn= '_4'
+    trialn= '_7'
 
     orig_stdout = sys.stdout
     f = open('data/simulazione_results/logs/out{}.txt'.format(trialn), 'w')
@@ -327,19 +327,27 @@ if __name__ == '__main__':
         if add_trend:
             fnamer+='_trend'
             trend = np.zeros((x, y, slices, run_len))
+            poly_coeffs_mat = np.zeros((x, y, slices, poly_deg+1))
+
             for i in range(x):
                 for j in range(y):
                     for s in range(slices):
                         temp_s = zscore((data_map[i,j,s,:] - data_avg[i,j,s]))
-                        poly_coeffs = np.polyfit(np.arange(temp_s.shape[0]), temp_s, poly_deg)
-                        trend[i,j,s,:] = np.round(np.polyval(poly_coeffs, np.arange(run_len)))
+                        if not np.any(np.isnan(temp_s)):
+                            poly_coeffs = np.polyfit(np.arange(temp_s.shape[0]), temp_s, poly_deg)
+                            trend[i,j,s,:] = np.round(np.polyval(poly_coeffs, np.arange(run_len)))
+                            poly_coeffs_mat[i,j,s,:] = poly_coeffs
+                            
+            # Salvare arr coefficienti su nifti
+            poly_coeffs_img = image.new_img_like(data, poly_coeffs_mat, copy_header=True)
+            poly_coeffs_img.to_filename('data/simulazione_results/polycoeffs.nii')
 
             data_run += trend
             print('Done with: generating trend for run {}. It took:    '.format(r+1), time.time() - tstart, '  seconds')
             
     
         # Zscore
-        run_zscore = zscore((data_run), 3)        
+        run_zscore = zscore((data_run), 3, nan_policy='omit')        
         for t in range(run_len):
             run_zscore[:,:,:,t] = run_zscore[:,:,:,t]*data_std + data_avg
         
