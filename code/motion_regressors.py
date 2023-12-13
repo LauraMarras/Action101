@@ -47,7 +47,7 @@ def get_movement_offsets(nTRs, dims=3, window_size=3, seed=0):
     
     return offsets_signals
 
-def affine_transform(volume, movement_offsets, upscalefactor=6, printtimes=False):
+def affine_transform(volume, movement_offsets, upscalefactor=1, printtimes=False):
     
     """
     Applies affine transform to MRI volume given rotation and traslation offsets
