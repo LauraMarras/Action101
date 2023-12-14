@@ -215,14 +215,16 @@ def plot_transform(original, transformed, off, xyz=(64, 64, 19), save=None, cros
 
 
 if __name__ == '__main__':
+    print('starting')
 
-    
     # Define options
     add_noise = True
     add_trend = True
     add_motion = True
+    save_motion = False
+    save_polycoeff = False
     save = True
-    trialn= '_7'
+    trialn= '_8'
 
     orig_stdout = sys.stdout
     f = open('data/simulazione_results/logs/out{}.txt'.format(trialn), 'w')
@@ -248,7 +250,7 @@ if __name__ == '__main__':
     # Set seed
     n_runs = len(run_cuts)
     n_subs = 10
-    seed_mat = np.reshape(np.arange(0,(n_runs+1)*n_subs), (n_subs,n_runs+1)) 
+    seed_mat = np.reshape(np.arange(0,(n_runs+2)*n_subs), (n_subs,n_runs+2)) 
     ### da mettere prima di for loop per soggetti
 
     # Sub loop
@@ -256,7 +258,7 @@ if __name__ == '__main__':
 
     # Load task data
     data_path = 'data/models/Domains/group_us_conv_'
-    task = np.loadtxt(data_path + 'agent_objective.csv', delimiter=',', skiprows=1)[:, 1:]
+    task = np.loadtxt(data_path + 'agent_objective.csv', delimiter=',', skiprows=1)[:, 1]
 
     # Load fMRI data and Mask
     data = image.load_img('data/simulazione_datasets/run1_template.nii')
@@ -273,18 +275,26 @@ if __name__ == '__main__':
     print('Done with: loading data, defining parameters. It took:    ', time.time() - tstart, '  seconds')
 
     # Downsample convolved regressors back to TR resolution and add timeshift for each slice
-    task_downsampled_byslice = np.full((slices, n_points, task.shape[1]), np.nan)
-
+    if len(task.shape) > 1:
+        task_columns = task.shape[1]
+    else:
+        task_columns = 1
+    
+    task_downsampled_byslice = np.full((slices, n_points, task_columns), np.nan)
     for t in range(n_points):
         for s in range(slices):
-            task_downsampled_byslice[s,t,:] = task[int(t*TR/time_res) + s,:]
+            task_downsampled_byslice[s,t,:] = task[int(t*TR/time_res) + s]
 
     print('Done with: downsampling and adding timeshift. It took:    ', time.time() - tstart, '  seconds')
 
     # Create fMRI signal starting from task
     data_signal = np.zeros((x, y, slices, n_points))
-    betas = np.random.randn(task.shape[1])
-    for s in range(15, slices):
+    betas = np.random.randn(task_columns)
+    
+    # Set seed
+    np.random.seed(seed_mat[sub,-1])
+    
+    for s in range(slices):
         signal = np.dot(task_downsampled_byslice[s,:,:], betas)
         (x_inds, y_inds) = np.where(mask_map[:,:,s] == 1)
         noise = np.repeat(np.random.randn(x, y, 1)+SNR_base, signal.shape[0], axis=2)
@@ -297,7 +307,7 @@ if __name__ == '__main__':
         fname+='_noise'
         
         # Set seed
-        np.random.seed(seed_mat[sub,-1])
+        np.random.seed(seed_mat[sub,-2])
 
         # Create gaussian noise
         noise = np.random.randn(x, y, slices, n_points)*noise_level
@@ -334,13 +344,13 @@ if __name__ == '__main__':
                     for s in range(slices):
                         temp_s = zscore((data_map[i,j,s,:] - data_avg[i,j,s]))
                         if not np.any(np.isnan(temp_s)):
-                            poly_coeffs = np.polyfit(np.arange(temp_s.shape[0]), temp_s, poly_deg)
-                            trend[i,j,s,:] = np.round(np.polyval(poly_coeffs, np.arange(run_len)))
-                            poly_coeffs_mat[i,j,s,:] = poly_coeffs
+                            poly_coeffs_mat[i,j,s,:] = np.polyfit(np.arange(temp_s.shape[0]), temp_s, poly_deg)
+                            trend[i,j,s,:] = np.round(np.polyval(poly_coeffs_mat[i,j,s,:], np.arange(run_len)))
                             
             # Salvare arr coefficienti su nifti
-            poly_coeffs_img = image.new_img_like(data, poly_coeffs_mat, copy_header=True)
-            poly_coeffs_img.to_filename('data/simulazione_results/polycoeffs.nii')
+            if save_polycoeff:
+                poly_coeffs_img = image.new_img_like(data, poly_coeffs_mat, copy_header=True)
+                poly_coeffs_img.to_filename('data/simulazione_results/trend/polycoeffs_run{}_{}.nii'.format(r+1, trialn))
 
             data_run += trend
             print('Done with: generating trend for run {}. It took:    '.format(r+1), time.time() - tstart, '  seconds')
@@ -374,7 +384,8 @@ if __name__ == '__main__':
                 image_final.header._structarr['pixdim'][4] = TR
                 image_final.to_filename('data/simulazione_results/fmri/{}{}.nii'.format(fname+fnamer, trialn))
 
-                # Save movemet offsets
+        # Save movemet offsets
+            if save_motion:
                 np.savetxt('data/simulazione_results/motionreg/movement_offs_run{}{}.1D'.format(r+1, trialn), movement_offsets, delimiter=' ')
             
 
@@ -392,3 +403,6 @@ if __name__ == '__main__':
     
     sys.stdout = orig_stdout
     f.close()
+
+    print('finished')
+    
