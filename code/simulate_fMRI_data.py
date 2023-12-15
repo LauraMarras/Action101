@@ -246,6 +246,18 @@ def segment(volume, n_comp=4):
     idxs = [np.where(model.means_[:,1] == x) for x in comp_means]
     comp_stds = np.sqrt(model.covariances_[:,1,1])[idxs]
 
+    # Plot
+    distros = np.empty((len(comp_means),1000))
+    x = np.empty((len(comp_means),1000))
+    for mm in range(len(comp_means)):
+        gs = norm(comp_means[mm], comp_stds[mm])
+        x[mm,:] = np.sort(gs.rvs(size=1000))
+        distros[mm,:] = gs.pdf(x[mm,:])
+
+    plt.hist(volume,len(np.unique(volume)),density=True)
+    plt.plot(x.T,distros.T)
+
+
     mats = np.full((volume.shape[0], volume.shape[1], volume.shape[2], n_comp), np.nan)
     for c in range(n_comp):
         mats[:,:,:,c] = norm(comp_means[c], comp_stds[c]).pdf(volume)
