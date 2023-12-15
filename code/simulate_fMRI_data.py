@@ -214,60 +214,45 @@ def plot_transform(original, transformed, off, xyz=(64, 64, 19), save=None, cros
     else:
         plt.show()
 
-def segment(volume, size=(127,2,37)):
+def segment(volume, n_comp=4):
+    # size = (127,2,37)
+    # aria_temp = volume[:size[0], :size[1], :size[2]]
+    # threshold = np.mean(aria_temp)
+    # volume_thresh = volume[np.where(volume>threshold)]
+    # mask = volume<=threshold
     
-    aria_temp = volume[:size[0], :size[1], :size[2]]
-    threshold = np.mean(aria_temp)
-    volume_thresh = volume[np.where(volume>threshold)]
-    mask = volume<=threshold
-    
-    ## 2 comp
-    nbins = np.unique(volume_thresh)
-    histogram, bin_edges = np.histogram(volume_thresh, nbins, density=True)
+    # ## 2 comp
+    # nbins = np.unique(volume_thresh)
+    # histogram, bin_edges = np.histogram(volume_thresh, nbins, density=True)
 
-    gm = GaussianMixture(2, random_state=0)
-    model_2 = gm.fit(np.vstack((histogram, bin_edges[0:-1])).T)
-    comp2_means = model_2.means_[:,1]
-    comp2_stds = np.sqrt(model_2.covariances_[:,1,1])
+    # gm = GaussianMixture(2, random_state=0)
+    # model_2 = gm.fit(np.vstack((histogram, bin_edges[0:-1])).T)
+    # comp2_means = model_2.means_[:,1]
+    # comp2_stds = np.sqrt(model_2.covariances_[:,1,1])
 
-    mat1 = norm(comp2_means[0], comp2_stds[0]).pdf(volume)
-    mat2 = norm(comp2_means[1], comp2_stds[1]).pdf(volume)
-    mat_2c = np.stack((mat1,mat2), axis=3)
-    mat_max_2c = np.argmax(mat_2c, axis=3)+1
-    mat_max_2c[mask] = 0
-
-
-    ## 3 COMP
-    histogram, bin_edges = np.histogram(volume.flatten(), np.unique(volume), density=True)
-    gm = GaussianMixture(3, random_state=0)
-    model_3 = gm.fit(np.vstack((histogram, bin_edges[0:-1])).T)
-    comp3_means = np.sort(model_3.means_[:,1])
-    idxs = [np.where(model_3.means_[:,1] == x) for x in comp3_means]
-    comp3_stds = np.sqrt(model_3.covariances_[:,1,1])[idxs]
-
-    mat1 = norm(comp3_means[0], comp3_stds[0]).pdf(volume)
-    mat2 = norm(comp3_means[1], comp3_stds[1]).pdf(volume)
-    mat3 = norm(comp3_means[2], comp3_stds[2]).pdf(volume)
-
-    mat_3c = np.stack((mat1,mat2,mat3), axis=3)
-    mat_max_3c = np.argmax(mat_3c, axis=3)
+    # mat1 = norm(comp2_means[0], comp2_stds[0]).pdf(volume)
+    # mat2 = norm(comp2_means[1], comp2_stds[1]).pdf(volume)
+    # mat_2c = np.stack((mat1,mat2), axis=3)
+    # mat_max_2c = np.argmax(mat_2c, axis=3)+1
+    # mat_max_2c[mask] = 0
 
     ## 4 comp
-    gm = GaussianMixture(4, random_state=0)
-    model_4 = gm.fit(np.vstack((histogram, bin_edges[0:-1])).T)
-    comp4_means = np.sort(model_4.means_[:,1])
-    idxs = [np.where(model_4.means_[:,1] == x) for x in comp4_means]
-    comp4_stds = np.sqrt(model_4.covariances_[:,1,1])[idxs]
+    histogram, bin_edges = np.histogram(volume.flatten(), np.unique(volume), density=True)
+    bin_edges = bin_edges[:-1] + np.diff(bin_edges)/2
+    
+    gm = GaussianMixture(n_comp, random_state=0)
+    model = gm.fit(np.vstack((histogram, bin_edges)).T)
+    comp_means = np.sort(model.means_[:,1])
+    idxs = [np.where(model.means_[:,1] == x) for x in comp_means]
+    comp_stds = np.sqrt(model.covariances_[:,1,1])[idxs]
 
-    mat1 = norm(comp4_means[0], comp4_stds[0]).pdf(volume)
-    mat2 = norm(comp4_means[1], comp4_stds[1]).pdf(volume)
-    mat3 = norm(comp4_means[2], comp4_stds[2]).pdf(volume)
-    mat4 = norm(comp4_means[3], comp4_stds[3]).pdf(volume)
+    mats = np.full((volume.shape[0], volume.shape[1], volume.shape[2], n_comp), np.nan)
+    for c in range(n_comp):
+        mats[:,:,:,c] = norm(comp_means[c], comp_stds[c]).pdf(volume)
+        
+    mat_max = np.argmax(mats, axis=3)
 
-    mat_4c = np.stack((mat1,mat2,mat3, mat4), axis=3)
-    mat_max_4c = np.argmax(mat_4c, axis=3)
-
-    return mat_max_2c, mat_max_3c, mat_max_4c
+    return mat_max
 
 if __name__ == '__main__':
     print('starting')
@@ -277,9 +262,10 @@ if __name__ == '__main__':
     add_trend = True
     add_motion = True
     save_motion = False
-    save_polycoeff = False
+    save_polycoeff = True
     save = True
-    trialn= '_8'
+    save_mask = True
+    trialn= '_4c'
 
     orig_stdout = sys.stdout
     f = open('data/simulazione_results/logs/out{}.txt'.format(trialn), 'w')
@@ -294,7 +280,7 @@ if __name__ == '__main__':
     SNR_base = 5
     noise_level = 4
     run_cuts = (np.array([536,450,640,650,472,480])/TR).astype('int')
-    poly_deg = 1 + round(TR*(run_cuts.sum()/len(run_cuts))/150)
+    n_comp = 4
     
     fname='simul'
 
@@ -322,14 +308,14 @@ if __name__ == '__main__':
     mask_map = mask.get_fdata()
 
     # Segment
-    mat_2c, mat_3c, mat_4c = segment(data_map[:,:,:,0])
-    mat_2cni = image.new_img_like(data, mat_2c, affine=data.affine, copy_header=True)
-    mat_3cni = image.new_img_like(data, mat_3c, affine=data.affine, copy_header=True)
-    mat_4cni = image.new_img_like(data, mat_4c, affine=data.affine, copy_header=True)
-    mat_2cni.to_filename('data/simulazione_results/fmri/mask2c.nii')
-    mat_3cni.to_filename('data/simulazione_results/fmri/mask3c2.nii')
-    mat_4cni.to_filename('data/simulazione_results/fmri/mask4c.nii')
+    mat_comps = segment(data_map[:,:,:,0], n_comp)
+    if save_mask:
+        mat_compsni = image.new_img_like(data, mat_comps, affine=data.affine, copy_header=True)
+        mat_compsni.to_filename('data/simulazione_results/fmri/mask_{}.nii'.format(trialn))
         
+    # Portante
+    data_masked = data_map[:,:,:,0][np.where(mat_comps > 0)]
+    portante = np.mean(data_masked)
 
     # Get n_voxels and slices, mean and std
     dimensions = tuple(data.header._structarr['pixdim'][1:4])
@@ -387,7 +373,7 @@ if __name__ == '__main__':
 
     
     idx=0
-    for r, run_len in enumerate(run_cuts):
+    for r, run_len in enumerate(run_cuts[:1]):
         fnamer = ''
 
         # Set seed 
@@ -401,23 +387,41 @@ if __name__ == '__main__':
         # Generate Trend (for each run separately)
         if add_trend:
             fnamer+='_trend'
-            trend = np.zeros((x, y, slices, run_len))
+
+            poly_deg = 1 + round(TR*(run_len)/150)
+            
+
+            trend_mat = np.zeros((x, y, slices, run_len))
             poly_coeffs_mat = np.zeros((x, y, slices, poly_deg+1))
 
-            for i in range(x):
-                for j in range(y):
-                    for s in range(slices):
-                        temp_s = zscore((data_map[i,j,s,:] - data_avg[i,j,s]))
-                        if not np.any(np.isnan(temp_s)):
-                            poly_coeffs_mat[i,j,s,:] = np.polyfit(np.arange(temp_s.shape[0]), temp_s, poly_deg)
-                            trend[i,j,s,:] = np.round(np.polyval(poly_coeffs_mat[i,j,s,:], np.arange(run_len)))
+            for c in range(n_comp)[1:]:
+                poly_coeffs = np.random.randn(poly_deg+1)
+                step=2
+                scale = np.power(10, np.arange(2,(poly_deg+1)*step,step))[::-1]
+                poly_coeffs[:-1] = poly_coeffs[:-1]/scale
+
+                data_c = data_map[:,:,:,0][np.where(mat_comps == c)]
+                scale_c = np.mean(data_c)
+                poly_coeffs_comp = poly_coeffs*scale_c/10000
+                trend = np.round(np.polyval(poly_coeffs_comp, np.arange(run_len)))
+                trend_mat[mat_comps == c, :] = trend
+                poly_coeffs_mat[mat_comps == c, :] = poly_coeffs_comp
+            
+
+            # for i in range(x):
+            #     for j in range(y):
+            #         for s in range(slices):
+            #             temp_s = zscore((data_map[i,j,s,:] - data_avg[i,j,s]))
+            #             if not np.any(np.isnan(temp_s)):
+            #                 poly_coeffs_mat[i,j,s,:] = np.polyfit(np.arange(temp_s.shape[0]), temp_s, poly_deg)
+            #                 trend[i,j,s,:] = np.round(np.polyval(poly_coeffs_mat[i,j,s,:], np.arange(run_len)))
                             
             # Salvare arr coefficienti su nifti
             if save_polycoeff:
                 poly_coeffs_img = image.new_img_like(data, poly_coeffs_mat, copy_header=True)
-                poly_coeffs_img.to_filename('data/simulazione_results/trend/polycoeffs_run{}_{}.nii'.format(r+1, trialn))
+                poly_coeffs_img.to_filename('data/simulazione_results/polycoeffs_run{}{}.nii'.format(r+1, trialn))
 
-            data_run += trend
+            data_run += trend_mat
             print('Done with: generating trend for run {}. It took:    '.format(r+1), time.time() - tstart, '  seconds')
             
     
