@@ -214,49 +214,42 @@ def plot_transform(original, transformed, off, xyz=(64, 64, 19), save=None, cros
     else:
         plt.show()
 
-def segment(volume, n_comp=4):
-    # size = (127,2,37)
-    # aria_temp = volume[:size[0], :size[1], :size[2]]
-    # threshold = np.mean(aria_temp)
-    # volume_thresh = volume[np.where(volume>threshold)]
-    # mask = volume<=threshold
+def segment(volume, n_comp=4, use_threshold=False, plot=False):
     
-    # ## 2 comp
-    # nbins = np.unique(volume_thresh)
-    # histogram, bin_edges = np.histogram(volume_thresh, nbins, density=True)
+    """
+    Segment volume into n populations of voxels
 
-    # gm = GaussianMixture(2, random_state=0)
-    # model_2 = gm.fit(np.vstack((histogram, bin_edges[0:-1])).T)
-    # comp2_means = model_2.means_[:,1]
-    # comp2_stds = np.sqrt(model_2.covariances_[:,1,1])
+    Inputs:
+    - volume : array, original MRI volume, matrix of shape x by y by z
+    - n_comp : int, number of populations to be segmented; default = 4 (air, white matter, grey matter, csf)
+    - use_threshold : bool, whether to not consider voxels supposedly located outside of brain based on threshold; default = False
+    - plot : bool, whether to plot histogram and gaussian of extracted populations; default = False
 
-    # mat1 = norm(comp2_means[0], comp2_stds[0]).pdf(volume)
-    # mat2 = norm(comp2_means[1], comp2_stds[1]).pdf(volume)
-    # mat_2c = np.stack((mat1,mat2), axis=3)
-    # mat_max_2c = np.argmax(mat_2c, axis=3)+1
-    # mat_max_2c[mask] = 0
+    Outputs:
+    - mat_max : array, matrix of shape x by y by z indicating membership for each voxel
+    """
+    
+    pname = 'GMM_{}'.format(n_comp)
 
-    ## 4 comp
-    histogram, bin_edges = np.histogram(volume.flatten(), np.unique(volume), density=True)
+    if use_threshold: # size = (127,2,37)
+        _, edges = np.histogram(volume.flatten(), 4, density=True)
+        edges_center = edges[:-1] + np.diff(edges)/2
+        threshold = edges_center[0]
+        vflat = volume[np.where(volume>threshold)].flatten()
+        aria_mask = volume <= threshold
+        pname+='_thresh'
+
+    else:
+        vflat = volume.flatten()
+    
+    histogram, bin_edges = np.histogram(vflat, np.unique(vflat), density=True)
     bin_edges = bin_edges[:-1] + np.diff(bin_edges)/2
     
     gm = GaussianMixture(n_comp, random_state=0)
     model = gm.fit(np.vstack((histogram, bin_edges)).T)
-    comp_means = np.sort(model.means_[:,1])
-    idxs = [np.where(model.means_[:,1] == x) for x in comp_means]
-    comp_stds = np.sqrt(model.covariances_[:,1,1])[idxs]
-
-    # Plot
-    distros = np.empty((len(comp_means),1000))
-    x = np.empty((len(comp_means),1000))
-    for mm in range(len(comp_means)):
-        gs = norm(comp_means[mm], comp_stds[mm])
-        x[mm,:] = np.sort(gs.rvs(size=1000))
-        distros[mm,:] = gs.pdf(x[mm,:])
-
-    plt.hist(volume,len(np.unique(volume)),density=True)
-    plt.plot(x.T,distros.T)
-
+    idxs = np.argsort(model.means_[:,1])
+    comp_means = model.means_[idxs, 1]
+    comp_stds = np.sqrt(model.covariances_[idxs,1,1])
 
     mats = np.full((volume.shape[0], volume.shape[1], volume.shape[2], n_comp), np.nan)
     for c in range(n_comp):
@@ -264,7 +257,47 @@ def segment(volume, n_comp=4):
         
     mat_max = np.argmax(mats, axis=3)
 
+    if use_threshold:
+        mat_max[aria_mask] = 0
+
+    # Plot
+    if plot:
+        distros = np.full((n_comp, 10000), np.nan)
+        x = np.full((n_comp, 10000), np.nan)
+        
+        for c in range(n_comp):
+            gs = norm(comp_means[c], comp_stds[c])
+            x[c,:] = np.sort(gs.rvs(size=10000))
+            distros[c,:] = gs.pdf(x[c,:])
+
+        hist = plt.hist(volume.flatten(), np.unique(volume), density=True)
+        plt.plot(x.T, distros.T)
+
+        # Adjust
+        plt.ylim(0, np.max(distros[1:]))
+
+        plt.savefig('{}.png'.format(pname))
+
+
     return mat_max
+
+
+def create_trend(poly_deg, n_comp=4):
+    
+    for c in range(n_comp)[1:]:
+        poly_coeffs = np.random.randn(poly_deg+1)
+        
+        scale = np.power(10, np.arange(2,(poly_deg+1)*2,2))[::-1]
+        
+        poly_coeffs[:-1] = poly_coeffs[:-1]/scale
+
+        data_c = data_map[:,:,:,0][np.where(mat_comps == c)]
+        scale_c = np.mean(data_c)
+        poly_coeffs_comp = poly_coeffs*scale_c/10000
+        trend = np.round(np.polyval(poly_coeffs_comp, np.arange(run_len)))
+        trend_mat[mat_comps == c, :] = trend
+        poly_coeffs_mat[mat_comps == c, :] = poly_coeffs_comp
+
 
 if __name__ == '__main__':
     print('starting')
@@ -276,7 +309,7 @@ if __name__ == '__main__':
     save_motion = False
     save_polycoeff = True
     save = True
-    save_mask = True
+    save_mask = False
     trialn= '_4c'
 
     orig_stdout = sys.stdout
@@ -320,7 +353,8 @@ if __name__ == '__main__':
     mask_map = mask.get_fdata()
 
     # Segment
-    mat_comps = segment(data_map[:,:,:,0], n_comp)
+    mat_comps = segment(data_map[:,:,:,0], n_comp, use_threshold=False, plot=True)
+    
     if save_mask:
         mat_compsni = image.new_img_like(data, mat_comps, affine=data.affine, copy_header=True)
         mat_compsni.to_filename('data/simulazione_results/fmri/mask_{}.nii'.format(trialn))
@@ -384,11 +418,12 @@ if __name__ == '__main__':
     print('Done with: generating and adding noise. It took:    ', time.time() - tstart, '  seconds')
 
     
+    # Iterate over runs
     idx=0
     for r, run_len in enumerate(run_cuts[:1]):
         fnamer = ''
 
-        # Set seed 
+        # Set seed
         np.random.seed(seed_mat[sub,r])
 
         run_idx = [*range(idx, run_len+idx)]
@@ -400,16 +435,18 @@ if __name__ == '__main__':
         if add_trend:
             fnamer+='_trend'
 
-            poly_deg = 1 + round(TR*(run_len)/150)
+            # Esitmate polydeg based on legth of each run
+            poly_deg = 1 + round(TR*(run_len)/150) # we are already adding 1 to this value, do we need to add again 1 later?
             
-
+            # Initialize matrices of trend and poly coefficients (for each voxel get: a time series fof trends, an array of poly coefficients(based on polydeg))
             trend_mat = np.zeros((x, y, slices, run_len))
-            poly_coeffs_mat = np.zeros((x, y, slices, poly_deg+1))
+            poly_coeffs_mat = np.zeros((x, y, slices, poly_deg))
 
+            # For each population
             for c in range(n_comp)[1:]:
-                poly_coeffs = np.random.randn(poly_deg+1)
+                poly_coeffs = np.random.randn(poly_deg)
                 step=2
-                scale = np.power(10, np.arange(2,(poly_deg+1)*step,step))[::-1]
+                scale = np.power(10, np.arange(2,(poly_deg)*step,step))[::-1]
                 poly_coeffs[:-1] = poly_coeffs[:-1]/scale
 
                 data_c = data_map[:,:,:,0][np.where(mat_comps == c)]
@@ -418,15 +455,6 @@ if __name__ == '__main__':
                 trend = np.round(np.polyval(poly_coeffs_comp, np.arange(run_len)))
                 trend_mat[mat_comps == c, :] = trend
                 poly_coeffs_mat[mat_comps == c, :] = poly_coeffs_comp
-            
-
-            # for i in range(x):
-            #     for j in range(y):
-            #         for s in range(slices):
-            #             temp_s = zscore((data_map[i,j,s,:] - data_avg[i,j,s]))
-            #             if not np.any(np.isnan(temp_s)):
-            #                 poly_coeffs_mat[i,j,s,:] = np.polyfit(np.arange(temp_s.shape[0]), temp_s, poly_deg)
-            #                 trend[i,j,s,:] = np.round(np.polyval(poly_coeffs_mat[i,j,s,:], np.arange(run_len)))
                             
             # Salvare arr coefficienti su nifti
             if save_polycoeff:
