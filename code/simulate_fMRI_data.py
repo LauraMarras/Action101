@@ -282,22 +282,38 @@ def segment(volume, n_comp=4, use_threshold=False, plot=False):
     return mat_max
 
 
-def create_trend(poly_deg, n_comp=4):
+def create_trend(run_len, volume, tissues_mask, seed, TR=2):
     
-    for c in range(n_comp)[1:]:
-        poly_coeffs = np.random.randn(poly_deg+1)
-        
-        scale = np.power(10, np.arange(2,(poly_deg+1)*2,2))[::-1]
-        
-        poly_coeffs[:-1] = poly_coeffs[:-1]/scale
+    # Get number of tissues
+    tissues = np.unique(tissues_mask)
 
-        data_c = data_map[:,:,:,0][np.where(mat_comps == c)]
-        scale_c = np.mean(data_c)
-        poly_coeffs_comp = poly_coeffs*scale_c/10000
-        trend = np.round(np.polyval(poly_coeffs_comp, np.arange(run_len)))
-        trend_mat[mat_comps == c, :] = trend
-        poly_coeffs_mat[mat_comps == c, :] = poly_coeffs_comp
+    # Esitmate degree of the polynomial based on legth of each run
+    poly_deg = 1 + round(TR*run_len/150)
 
+    # Initialize matrix of trend for each voxel get a time series of trends
+    trend = np.zeros((volume.shape[0], volume.shape[1], volume.shape[2], run_len))
+    poly_coeff_mat = np.zeros((volume.shape[0], volume.shape[1], volume.shape[2], poly_deg+1))
+    
+    # Set seed
+    np.random.seed(seed)
+
+    # Generate random coefficients: matrix of poly coefficients(based on polydeg) for each tissue
+    random_coeffs = np.random.randn(poly_deg+1, len(tissues))
+
+    # Scale the random coeffients according to order and tissue mean intensity
+    poly_sorted = np.sort(random_coeffs, axis=1)
+    
+    scale_poly_order = np.append(np.power(10, np.arange(2,(poly_deg)*2 +1,2))[::-1], 1)
+    scale_tissue = np.array([np.mean(volume[np.where(tissues_mask == tissue)]) for tissue in tissues])/np.mean(volume)/100
+    
+    poly_scaled = poly_sorted / scale_poly_order[:, None] * scale_tissue
+
+    # Create trend time series for each tissue and assign to matrix using tissue mask
+    for tissue in tissues:
+        trend[tissues_mask == tissue, :] = np.round(np.polyval(poly_scaled[:,tissue], np.arange(run_len)))
+        poly_coeff_mat[tissues_mask == tissue, :] = poly_scaled[:,tissue]
+    
+    return trend, poly_coeff_mat
 
 if __name__ == '__main__':
     print('starting')
@@ -353,14 +369,14 @@ if __name__ == '__main__':
     mask_map = mask.get_fdata()
 
     # Segment
-    mat_comps = segment(data_map[:,:,:,0], n_comp, use_threshold=False, plot=True)
+    tissues_mask = segment(data_map[:,:,:,0], n_comp, use_threshold=False, plot=False)
     
     if save_mask:
-        mat_compsni = image.new_img_like(data, mat_comps, affine=data.affine, copy_header=True)
-        mat_compsni.to_filename('data/simulazione_results/fmri/mask_{}.nii'.format(trialn))
+        tissues_maskni = image.new_img_like(data, tissues_mask, affine=data.affine, copy_header=True)
+        tissues_maskni.to_filename('data/simulazione_results/fmri/mask_{}.nii'.format(trialn))
         
     # Portante
-    data_masked = data_map[:,:,:,0][np.where(mat_comps > 0)]
+    data_masked = data_map[:,:,:,0][np.where(tissues_mask > 0)]
     portante = np.mean(data_masked)
 
     # Get n_voxels and slices, mean and std
@@ -435,33 +451,14 @@ if __name__ == '__main__':
         if add_trend:
             fnamer+='_trend'
 
-            # Esitmate polydeg based on legth of each run
-            poly_deg = 1 + round(TR*(run_len)/150) # we are already adding 1 to this value, do we need to add again 1 later?
-            
-            # Initialize matrices of trend and poly coefficients (for each voxel get: a time series fof trends, an array of poly coefficients(based on polydeg))
-            trend_mat = np.zeros((x, y, slices, run_len))
-            poly_coeffs_mat = np.zeros((x, y, slices, poly_deg))
-
-            # For each population
-            for c in range(n_comp)[1:]:
-                poly_coeffs = np.random.randn(poly_deg)
-                step=2
-                scale = np.power(10, np.arange(2,(poly_deg)*step,step))[::-1]
-                poly_coeffs[:-1] = poly_coeffs[:-1]/scale
-
-                data_c = data_map[:,:,:,0][np.where(mat_comps == c)]
-                scale_c = np.mean(data_c)
-                poly_coeffs_comp = poly_coeffs*scale_c/10000
-                trend = np.round(np.polyval(poly_coeffs_comp, np.arange(run_len)))
-                trend_mat[mat_comps == c, :] = trend
-                poly_coeffs_mat[mat_comps == c, :] = poly_coeffs_comp
+            trend, poly_coeffs = create_trend(run_len, data_map[:,:,:,0], tissues_mask, seed_mat[sub,r])
                             
             # Salvare arr coefficienti su nifti
             if save_polycoeff:
-                poly_coeffs_img = image.new_img_like(data, poly_coeffs_mat, copy_header=True)
+                poly_coeffs_img = image.new_img_like(data, poly_coeffs, copy_header=True)
                 poly_coeffs_img.to_filename('data/simulazione_results/polycoeffs_run{}{}.nii'.format(r+1, trialn))
 
-            data_run += trend_mat
+            data_run += trend
             print('Done with: generating trend for run {}. It took:    '.format(r+1), time.time() - tstart, '  seconds')
             
     
