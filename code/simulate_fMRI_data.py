@@ -139,7 +139,7 @@ def plot_transform(original, transformed, off, xyz=(64, 64, 19), save=None, cros
     - transformed : matrix of shape x by y by s (output of affine_transform)
     - off : movement offsets, array of shape 6 (3 rotation and 3 traslation)
     - xyz : tuple of len=3 indicating slices to show; default = (64, 64, 19)
-    - save : filename to save figure, if want to save; default = None
+    - save : filename_suffix to save figure, if want to save; default = None
     - cross : whether to add crosses indicating slices; default = True
     
     Outputs:
@@ -213,22 +213,22 @@ def plot_transform(original, transformed, off, xyz=(64, 64, 19), save=None, cros
     else:
         plt.show()
 
-def segment(volume, n_comp=4, use_threshold=False, plot=False):
+def segment(volume, n_tissues=4, use_threshold=False, plot=False, save=None):
     
     """
     Segment volume into n populations of voxels
 
     Inputs:
     - volume : array, original MRI volume, matrix of shape x by y by z
-    - n_comp : int, number of populations to be segmented; default = 4 (air, white matter, grey matter, csf)
+    - n_tissues : int, number of populations to be segmented; default = 4 (air, white matter, grey matter, csf)
     - use_threshold : bool, whether to not consider voxels supposedly located outside of brain based on threshold; default = False
     - plot : bool, whether to plot histogram and gaussian of extracted populations; default = False
-
+    - save : str, whether (filename_suffix) to save tissues mask; default = None
     Outputs:
     - mat_max : array, matrix of shape x by y by z indicating membership for each voxel
     """
     
-    pname = 'GMM_{}'.format(n_comp)
+    pname = 'GMM_{}'.format(n_tissues)
 
     if use_threshold: # size = (127,2,37)
         _, edges = np.histogram(volume.flatten(), 4, density=True)
@@ -244,14 +244,14 @@ def segment(volume, n_comp=4, use_threshold=False, plot=False):
     histogram, bin_edges = np.histogram(vflat, np.unique(vflat), density=True)
     bin_edges = bin_edges[:-1] + np.diff(bin_edges)/2
     
-    gm = GaussianMixture(n_comp, random_state=0)
+    gm = GaussianMixture(n_tissues, random_state=0)
     model = gm.fit(np.vstack((histogram, bin_edges)).T)
     idxs = np.argsort(model.means_[:,1])
     comp_means = model.means_[idxs, 1]
     comp_stds = np.sqrt(model.covariances_[idxs,1,1])
 
-    mats = np.full((volume.shape[0], volume.shape[1], volume.shape[2], n_comp), np.nan)
-    for c in range(n_comp):
+    mats = np.full((volume.shape[0], volume.shape[1], volume.shape[2], n_tissues), np.nan)
+    for c in range(n_tissues):
         mats[:,:,:,c] = norm(comp_means[c], comp_stds[c]).pdf(volume)
         
     mat_max = np.argmax(mats, axis=3)
@@ -261,10 +261,10 @@ def segment(volume, n_comp=4, use_threshold=False, plot=False):
 
     # Plot
     if plot:
-        distros = np.full((n_comp, 10000), np.nan)
-        x = np.full((n_comp, 10000), np.nan)
+        distros = np.full((n_tissues, 10000), np.nan)
+        x = np.full((n_tissues, 10000), np.nan)
         
-        for c in range(n_comp):
+        for c in range(n_tissues):
             gs = norm(comp_means[c], comp_stds[c])
             x[c,:] = np.sort(gs.rvs(size=10000))
             distros[c,:] = gs.pdf(x[c,:])
@@ -277,10 +277,13 @@ def segment(volume, n_comp=4, use_threshold=False, plot=False):
 
         plt.savefig('{}.png'.format(pname))
 
+    # Save
+    if save:
+        save_images(mat_max, 'mask/mask_{}'.format(save))
 
     return mat_max
 
-def create_trend(nTRs, volume, tissues_mask, seed=0, TR=2):
+def create_trend(nTRs, volume, tissues_mask, seed=0, TR=2, save=None):
     
     """
     Generate trend signal for each voxel
@@ -291,12 +294,13 @@ def create_trend(nTRs, volume, tissues_mask, seed=0, TR=2):
     - tissues_mask : array, matrix of shape x by y by z indicating membership for each voxel (air, white matter, grey matter, csf)
     - seed : int, seed for random generation; default = 0
     - TR : int, default = 2
+    - save : str, whether (filename_suffix) to save polynomial coefficients; default = None
     
     Outputs:
     - trend : array, matrix of shape x by y by z by nTRs containing trend timeseries for each voxel
     - poly_coeff_mat : array, matrix of shape x by y by z indicating trend polynomial coefficients for each voxel
     """
-
+    
     # Get number of tissues
     tissues = np.unique(tissues_mask)
 
@@ -325,10 +329,14 @@ def create_trend(nTRs, volume, tissues_mask, seed=0, TR=2):
     for tissue in tissues:
         trend[tissues_mask == tissue, :] = np.round(np.polyval(poly_scaled[:,tissue], np.arange(nTRs)))
         poly_coeff_mat[tissues_mask == tissue, :] = poly_scaled[:,tissue]
-    
-    return trend, poly_coeff_mat
+            
+    # Save polynomial coefficients as nifti file
+    if save:
+        save_images(poly_coeff_mat, 'trend/polycoeffs{}'.format(save))
 
-def get_motion_offsets_data(nTRs, path_reg, dimensions=(2,2,3)):
+    return data_run+trend
+
+def get_motion_offsets_data(nTRs, path_reg, dimensions=(2,2,3), seed=0):
     
     """
     Generate movement offsets signal along time starting from real data
@@ -336,13 +344,16 @@ def get_motion_offsets_data(nTRs, path_reg, dimensions=(2,2,3)):
     Inputs:
     - nTRs : int, number of TRs of wanted signal
     - dimensions : tuple, dimension of voxels in mm, used to scale offsets; default = (2,2,3)
-    
+    - seed : int, seed for random generation; default = 0
     Outputs:
     - offset_signals : signal for each movement offset, matrix of shape nTRs by n_dims*2
     """
 
     # Load movement regressors of real subjects
     sublist = os.listdir(path_reg)
+
+    # Set seed
+    np.random.seed(seed)
 
     # Randomly pick 3 subjects
     subs = np.random.randint(0, len(sublist), 3)
@@ -376,58 +387,62 @@ def get_motion_offsets_data(nTRs, path_reg, dimensions=(2,2,3)):
     offset_signals = offset_signals / np.array([1,1,1, dimensions[0], dimensions[1], dimensions[2]])
     return offset_signals
 
-def generate_noise(data_signal, noise_level=4, TR=2, seed=0):
-            
-            (x, y, slices, n_points) = data_signal.shape
-            
-            # Set seed
-            np.random.seed(seed)
+def generate_noise(data_signal, noise_level=4, TR=2, seed=0, save=None):
+    
+    (x, y, slices, n_points) = data_signal.shape
+    
+    # Set seed
+    np.random.seed(seed)
 
-            # Create gaussian noise
-            noise = np.random.randn(x, y, slices, n_points)*noise_level
-        
-            # Convolve noise with HRF
-            noise_conv = convolve_HRF(noise, TR)
+    # Create gaussian noise
+    noise = np.random.randn(x, y, slices, n_points)*noise_level
 
-            return noise_conv
+    # Convolve noise with HRF
+    noise_conv = convolve_HRF(noise, TR)
 
-def downsample_timeshift(task, slices, time_res=0.05, TR=2):
+    # Save noise
+    if save:
+        save_images(noise_conv, 'noise/noise_{}'.format(save))
+
+    return data_signal + noise_conv
+
+def downsample_timeshift(task, slices, task_time_res=0.05, TR=2):
     
     # Get dimensions
-    n_points = int(task.shape[0]/TR*time_res)
+    n_points = int(task.shape[0]/TR*task_time_res)
 
     # Downsample convolved regressors back to TR resolution and add timeshift for each slice
     task_downsampled_byslice = np.full((slices, n_points, task.shape[1]), np.nan)
     for t in range(n_points):
         for s in range(slices):
-            task_downsampled_byslice[s,t,:] = task[int(t*TR/time_res) + s]
+            task_downsampled_byslice[s,t,:] = task[int(t*TR/task_time_res) + s]
     
     return task_downsampled_byslice
     
 def seminate_mask(task, mask, SNR=5, seed=0):
-        # Set seed
-        np.random.seed(seed)
-        
-        # Initialize data matrix
-        data_signal = np.zeros((mask.shape[0], mask.shape[1], mask.shape[2], task.shape[1]))
+    # Set seed
+    np.random.seed(seed)
+    
+    # Initialize data matrix
+    data_signal = np.zeros((mask.shape[0], mask.shape[1], mask.shape[2], task.shape[1]))
 
-        # Create signal by multiply task data by random betas
-        betas = np.random.randn(task.shape[2])
-        signal = np.dot(task, betas)
-        
-        # Get mask indices
-        (x_inds, y_inds, z_inds) = np.where(mask == 1)
+    # Create signal by multiply task data by random betas
+    betas = np.random.randn(task.shape[2])
+    signal = np.dot(task, betas)
+    
+    # Get mask indices
+    (x_inds, y_inds, z_inds) = np.where(mask == 1)
 
-        # Add noise (scaled by SNR factor) and assign signal to each voxel within mask
-        noise = np.random.randn(x_inds.shape[0]) + SNR
-        data_signal[x_inds, y_inds, z_inds, :] = (signal[z_inds].T*noise).T
+    # Add noise (scaled by SNR factor) and assign signal to each voxel within mask
+    noise = np.random.randn(x_inds.shape[0]) + SNR
+    data_signal[x_inds, y_inds, z_inds, :] = (signal[z_inds].T*noise).T
 
-        return data_signal
+    return data_signal
 
-def gen_motion(data, dimensions, regressors_path, upscalefactor=1):
-                
+def generate_motion(data, dimensions, regressors_path, upscalefactor=1, seed=0, save=None):
+    
     # Get movement offsets
-    movement_offsets = get_motion_offsets_data(data.shape[-1], regressors_path, dimensions=dimensions)
+    movement_offsets = get_motion_offsets_data(data.shape[-1], regressors_path, dimensions=dimensions, seed=seed)
     
     # Initialize final matrix
     run_motion = np.full(data.shape, np.nan)
@@ -436,160 +451,139 @@ def gen_motion(data, dimensions, regressors_path, upscalefactor=1):
     for t in range(data.shape[-1]):
         run_motion[:,:,:, t] = affine_transformation(data[:,:,:,t], movement_offsets[t,:], upscalefactor=upscalefactor)
     
+    # Save movemet offsets
+    if save:
+        np.savetxt('data/simulazione_results/motionreg/movement_offs_{}.1D'.format(save), movement_offsets, delimiter=' ')
+            
     return run_motion
 
-if __name__ == '__main__':
+def save_images(img_tosave, path):
+    img = image.new_img_like(data_nii, img_tosave, affine=data_nii.affine, copy_header=True)
+    img.to_filename('data/simulazione_results/{}.nii'.format(path))
     
+
+if __name__ == '__main__':
+    tstart = time.time()
+
     # Define options
+    n_subs = 10
     add_noise = True
     add_trend = True
     add_motion = True
-    save_motion = False
-    save_polycoeff = True
+    
+    # Saving options
     save = True
-    save_mask = False
-    trialn= '24_1'
+    filename_prefix = 'simul'
+    filename_suffix = 'debug'
 
+    # Print output to txt file
     orig_stdout = sys.stdout
-    f = open('data/simulazione_results/logs/out{}.txt'.format(trialn), 'w')
-    sys.stdout = f
+    logfile = open('data/simulazione_results/logs/out{}.txt'.format(filename_suffix), 'w')
+    sys.stdout = logfile
 
-    tstart = time.time()
-    
-    # Define parameters
-    n_points = 1614 #task.shape[0]/TR*time_res
+    # Define fMRI parameters
     TR = 2
-    time_res = 0.05
-    SNR_base = 5
+    SNR = 5
     noise_level = 4
-    run_cuts = (np.array([536,450,640,650,472,480])/TR).astype('int')
-    n_comp = 4
-    
-    fname='simul'
+    n_tissues = 4 # air, white matter, grey matter, csf
 
     # Movement parameters
     movement_upscale = 1
     regressors_path = 'data/simulazione_datasets/motionreg/'
     
-    # Set seed
-    n_runs = len(run_cuts)
-    n_subs = 10
-    seed_mat = np.reshape(np.arange(0,(n_runs+2)*n_subs), (n_subs,n_runs+2)) 
-    ### da mettere prima di for loop per soggetti
-
-    # Sub loop
-    sub = 0 
-
     # Load task data
     data_path = 'data/models/Domains/group_us_conv_'
     task = np.loadtxt(data_path + 'agent_objective.csv', delimiter=',', skiprows=1)[:, 1:]
     task = np.atleast_2d(task.T).T
 
-    # Load fMRI data and Mask
-    data = image.load_img('data/simulazione_datasets/run1_template.nii')
-    mask = image.load_img('data/simulazione_datasets/atlas_2orig.nii')
-    data_map = data.get_fdata()
-    mask_map = mask.get_fdata()
+    # Define task parameters
+    task_time_res = 0.05
+    run_dur_sec = [536,450,640,650,472,480] # duration of each run in seconds
+    run_dur = (np.array(run_dur_sec)/TR).astype(int) # duration of each run in TRs
+    run_times = np.array(list(zip((np.cumsum(run_dur) - run_dur), np.cumsum(run_dur))))
+    n_runs = len(run_dur_sec)
 
-    # Segment
-    tissues_mask = segment(data_map[:,:,:,0], n_comp, use_threshold=False, plot=False)
-    
-    if save_mask:
-        tissues_maskni = image.new_img_like(data, tissues_mask, affine=data.affine, copy_header=True)
-        tissues_maskni.to_filename('data/simulazione_results/fmri/mask_{}.nii'.format(trialn))
+    # Set seed
+    seed_mat = np.reshape(np.arange(0,((n_runs*2)+2)*n_subs), (n_subs,n_runs*2+2))
+
+    # Sub loop
+    sub = 0 
+
+    # Load fMRI data and Mask (voxels where to seminate task signal)
+    data_nii = image.load_img('data/simulazione_datasets/run1_template.nii')
+    mask_nii = image.load_img('data/simulazione_datasets/atlas_2orig.nii')
+
+    fmri_data = data_nii.get_fdata()[:,:,:,0] # Get single volume
+    semination_mask = mask_nii.get_fdata()
 
     # Get n_voxels and slices, mean and std
-    voxel_dims_mm = tuple(data.header._structarr['pixdim'][1:4])
-    x,y,slices,_ = data.shape
-    data_avg = np.mean(data_map, axis=3)
-    data_std = np.std(data_map, axis=3, ddof=1)
+    voxel_dims_mm = tuple(data_nii.header._structarr['pixdim'][1:4])
+    x,y,slices,_ = data_nii.shape
+
+    data_avg = np.mean(data_nii.get_fdata(), axis=3) # problema se carichiamo solo un volume!!
+    data_std = np.std(data_nii.get_fdata(), axis=3, ddof=1)
 
     print('Done with: loading data, defining parameters. It took:    ', time.time() - tstart, '  seconds')
 
     # Downsample convolved regressors back to TR resolution and add timeshift for each slice    
-    task_downsampled_byslice = downsample_timeshift(task, slices, time_res, TR)
-
+    task_downsampled_byslice = downsample_timeshift(task, slices, task_time_res, TR)
     print('Done with: downsampling and adding timeshift. It took:    ', time.time() - tstart, '  seconds')
 
-    # Create fMRI signal starting from task
-    data_signal = seminate_mask(task_downsampled_byslice, mask_map, SNR_base, seed_mat[sub,-1])
-    
+    # Create fMRI signal starting from task and seminate only in mask
+    data_signal = seminate_mask(task_downsampled_byslice, semination_mask, SNR, seed_mat[sub,-1])
     print('Done with: creating fMRI signal from task. It took:    ', time.time() - tstart, '  seconds')
 
-    # Generate Noise
+    # Generate and add noise
     if add_noise:
-        fname+='_noise'
-        data_noise = generate_noise(data_signal, noise_level, TR, seed_mat[sub,-2])
-        data_signal += data_noise
-
+        filename_prefix += '_noise'
+        data_signal = generate_noise(data_signal, noise_level, TR, seed_mat[sub,-2], save=filename_suffix) #save=filename_suffix
     print('Done with: generating and adding noise. It took:    ', time.time() - tstart, '  seconds')
 
-    
+    # Segment
+    tissues_mask = segment(fmri_data, n_tissues, use_threshold=False, plot=False, save=filename_suffix) #save=None
+    print('Done with: segmenting. It took:    ', time.time() - tstart, '  seconds')
+
     # Iterate over runs
-    idx=0
-    for r, run_len in enumerate(run_cuts[:1]):
-        fnamer = ''
-        run_idx = [*range(idx, run_len+idx)]
+    for r in range(n_runs):
+
+        # Set filename for each run
+        filename_prefixr = ''
+        filename_suffixr = '_run{}_{}'.format(r+1, filename_suffix)
+
+        # Get data of single run
+        run_len = run_dur[r]
         
-        # Get data of single run 
+        run_idx = [*range(run_times[r][0], run_times[r][1])]
         data_run = data_signal[:,:,:,run_idx]
 
         # Generate Trend (for each run separately)
         if add_trend:
-            fnamer+='_trend'
-
-            trend, poly_coeffs = create_trend(run_len, data_map[:,:,:,0], tissues_mask, seed_mat[sub,r])
-                            
-            # Salvare arr coefficienti su nifti
-            if save_polycoeff:
-                poly_coeffs_img = image.new_img_like(data, poly_coeffs, copy_header=True)
-                poly_coeffs_img.to_filename('data/simulazione_results/polycoeffs_run{}{}.nii'.format(r+1, trialn))
-
-            data_run += trend
-            print('Done with: generating trend for run {}. It took:    '.format(r+1), time.time() - tstart, '  seconds')
+            filename_prefixr += '_trend' 
+            data_run = create_trend(run_len, fmri_data, tissues_mask, seed=seed_mat[sub,r], save=filename_suffixr) # save=None
+        print('Done with: generating trend for run {}. It took:    '.format(r+1), time.time() - tstart, '  seconds')
             
-    
         # Zscore
         run_zscore = zscore((data_run), axis=3, nan_policy='omit')
-        data_zscore = run_zscore * np.expand_dims(data_std, axis=3) + np.expand_dims(data_avg, axis=3)
-        
+        data_run = run_zscore * np.expand_dims(data_std, axis=3) + np.expand_dims(data_avg, axis=3) #problema se carichiamo solo un volume
         print('Done with: zscoring for run {}. It took:    '.format(r+1), time.time() - tstart, '  seconds')
 
         # Add motion
-        if add_motion:
-            fnamer+='_motion'
-            
-            run_motion = gen_motion(data_zscore, dimensions=voxel_dims_mm, upscalefactor=movement_upscale, regressors_path=regressors_path)
-            
-            print('Done with: adding motion for run {}. It took:    '.format(r+1), time.time() - tstart, '  seconds')
-        
+        if add_motion:        
+            filename_prefixr += '_motion'
+            data_run = generate_motion(data_run, dimensions=voxel_dims_mm, upscalefactor=movement_upscale, regressors_path=regressors_path, seed=seed_mat[sub, n_runs+r], save=filename_suffixr) # save=None
+        print('Done with: adding motion for run {}. It took:    '.format(r+1), time.time() - tstart, '  seconds')
             
         # Save data
-            if save:
-                fnamer+='_run{}'.format(r+1)
-                image_final = image.new_img_like(data, run_motion, affine = data.affine, copy_header=True)
-                image_final.header._structarr['slice_duration'] = TR
-                image_final.header._structarr['pixdim'][4] = TR
-                image_final.to_filename('data/simulazione_results/fmri/{}{}.nii'.format(fname+fnamer, trialn))
-
-        # Save movemet offsets
-            if save_motion:
-                np.savetxt('data/simulazione_results/motionreg/movement_offs_run{}{}.1D'.format(r+1, trialn), movement_offsets, delimiter=' ')
-            
-
-        else:
-            if save:
-                fnamer+='_run{}'.format(r+1)
-                image_final = image.new_img_like(data, run_zscore, affine=data.affine, copy_header=True)
-                image_final.header._structarr['slice_duration'] = TR
-                image_final.header._structarr['pixdim'][4] = TR
-                image_final.to_filename('data/simulazione_results/fmri/{}{}.nii'.format(fname+fnamer, trialn))
+        if save: 
+            image_final = image.new_img_like(data_nii, data_run, affine = data_nii.affine, copy_header=True)
+            image_final.header._structarr['slice_duration'] = TR
+            image_final.header._structarr['pixdim'][4] = TR
+            image_final.to_filename('data/simulazione_results/fmri/{}{}.nii'.format(filename_prefix+filename_prefixr, filename_suffixr))
         
-        idx+=run_len
-
     print('Done with: all. It took:    '.format(r+1), time.time() - tstart, '  seconds')
-    
+        
+    # Close logfile
     sys.stdout = orig_stdout
-    f.close()
+    logfile.close()
 
-    print('finished')
+    print('finished____')
