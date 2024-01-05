@@ -1,14 +1,120 @@
 import numpy as np
+import time
+import sys
+import os
+from matplotlib import pyplot as plt
 from nilearn import image
 from scipy.stats import zscore, norm
 from scipy.ndimage import zoom, affine_transform
 from skimage import transform
-import pandas as pd
-import time
-from matplotlib import pyplot as plt
-import sys
 from sklearn.mixture import GaussianMixture
-import os
+
+def downsample_timeshift(task, n_slices, task_time_res=0.05, TR=2):
+    
+    """
+    Downsample task data to TR resolution and create time shift over slices
+
+    Inputs:
+    - task : array, 2d matrix of shape n_timepoints (in task time resolution) by n_task_regressor(s)
+    - n_slices : int, number of fMRI volume slices
+    - task_time_res : float, sampling interval of task in seconds; default = 0.05
+    - TR : int or float, fMRI resolution, in seconds; default = 2
+   
+    Outputs:
+    - task_downsampled_byslice : array, 2d matrix of shape n_timepoints (in TR resolution) by n_task_regressor(s)
+    """
+
+    # Get dimensions
+    n_points = int(task.shape[0]/TR*task_time_res)
+
+    # Downsample convolved regressors back to TR resolution and add timeshift for each slice
+    task_downsampled_byslice = np.full((n_slices, n_points, task.shape[1]), np.nan)
+    for t in range(n_points):
+        for s in range(n_slices):
+            task_downsampled_byslice[s,t,:] = task[int(t*TR/task_time_res) + s]
+    
+    return task_downsampled_byslice
+
+def seminate_mask(task, ROI_mask, SNR=5, seed=0):
+    
+    """
+    Create fMRI signal based on task regressors and assign it to ROI
+
+    Inputs:
+    - task : array, 2d matrix of shape = n_timepoints (in TR resolution) by n_task_regressor(s)
+    - ROI_mask : array, 3d matrix of booleans of shape = x by y by z indicating voxel within ROI
+    - SNR : int or float, indicates signal to noise ratio; default = 5
+    - seed : int, seed for random generation of betas; default = 0
+
+    Outputs:
+    - data_signal : array, 4d matrix of shape = x by y by z by time containing task-related signal only in voxels within mask
+    """
+
+    # Set seed
+    np.random.seed(seed)
+    
+    # Initialize data matrix
+    data_signal = np.zeros((ROI_mask.shape[0], ROI_mask.shape[1], ROI_mask.shape[2], task.shape[1]))
+
+    # Create signal by multiply task data by random betas
+    betas = np.random.randn(task.shape[2])
+    signal = np.dot(task, betas)
+    
+    # Get mask indices
+    (x_inds, y_inds, z_inds) = np.where(ROI_mask == 1)
+
+    # Add noise (scaled by SNR factor) and assign signal to each voxel within mask
+    noise = np.random.randn(x_inds.shape[0]) + SNR
+    data_signal[x_inds, y_inds, z_inds, :] = (signal[z_inds].T*noise).T
+
+    return data_signal
+
+def add_noise(data_signal, noise_level=4, TR=2, seed=0, save=None, check_autocorr=False):
+    
+    """
+    Add noise to fMRI data matrix
+
+    Inputs:
+    - data_signal : array, 4d matrix of shape = x by y by z by time containing task-related signal only in voxels within mask, else zeros
+    - noise_level : int or float, indicates scale of gaussian noise; default = 4
+    - TR : int or float, fMRI resolution, in seconds; default = 2
+    - seed : int, seed for random generation of gaussian noise; default = 0
+    - save : str, path where (whether) to save generated noise as nifti file; default = None (don't save)
+    - check_autocorr : bool, whether to measure difference in autocorrelation pre and post convolution or not; default = False
+    
+    Outputs:
+    - data_noise : array, 4d matrix of shape = x by y by slices containing HRF-convoluted noise and task-related signal
+    
+    Calls:
+    - convolve_HRF()
+    - save_images()
+    - autocorr_diff()
+    """
+
+    # Get fMRI data dimensions
+    (x, y, z, n_points) = data_signal.shape
+    
+    # Set seed
+    np.random.seed(seed)
+
+    # Create gaussian noise
+    noise = np.random.randn(x, y, z, n_points)*noise_level
+
+    # Convolve noise with HRF
+    noise_conv = convolve_HRF(noise, TR)
+
+    # Add noise to signal
+    data_noise = data_signal + noise_conv
+
+    # Save noise
+    if save:
+        save_images(noise_conv, save)
+    
+    # Check difference in autocorrelation
+    if check_autocorr:
+        autocorr_diff(data_signal+noise, data_noise, coords=(64,94,17)) #(56,92,16)
+
+    return data_noise
 
 def convolve_HRF(mat, TR=2, hrf_p=8.6, hrf_q=0.547, dur=12):
     
@@ -16,14 +122,14 @@ def convolve_HRF(mat, TR=2, hrf_p=8.6, hrf_q=0.547, dur=12):
     Convolve each column of matrix with a HRF 
     
     Inputs:
-    - mat : matrix to be convolved
-    - TR : sampling interval in seconds (fMRI TR)
-    - hrf_p : parameter of HRF
-    - hrf_q : parameter of HRF
-    - dur : duration of HRF, in seconds
+    - mat : array, 4d matrix of shape x by y by z by time to be convolved
+    - TR : int or float, fMRI resolution, in seconds; default = 2
+    - hrf_p : int or float, parameter of HRF; default = 8.6
+    - hrf_q : int or float, parameter of HRF; default = 0.547
+    - dur : int or float, duration of HRF in seconds; default = 12
 
     Outputs:
-    - group_convolved : dataframe of full group model convolved
+    - mat_conv : array, 4d matrix of shape x by y by z by time
     """
 
     # Define HRF
@@ -41,191 +147,54 @@ def convolve_HRF(mat, TR=2, hrf_p=8.6, hrf_q=0.547, dur=12):
     
     return mat_conv
 
-def get_movement_offsets(nTRs, SNR, dims=3, window_size=3, seed=0):
+def autocorr_diff(data_noise, data_noise_conv, coords=(0,0,0)):
     
     """
-    Generate movement offsets signal along time
-
+    Measure and plot autocorrelation of two voxels 
+    
     Inputs:
-    - nTRs : int, number of TRs of wanted signal
-    - SNR : tuple of int, signal to noise, determines how much to scale offsets for rotation and traslation
-    - dims : int, dimensionality of volume; default = 3
-    - window_size : int, size (number of TRs) of window used for smoothing signal; default = 3
-    - seed : seed for the random generation; default = 0
+    - data_noise : array, 4d matrix of shape x by y by z by time
+    - data_noise_conv : array, 4d matrix of shape x by y by z by time
+    - coords : tuple, sequence of 3 int indicating x, y and z coordinates of chosen voxel; default = (0,0,0)
 
     Outputs:
-    - offset_signals : signal for each movement offset, matrix of shape nTRs by dims*2
+    - saves autocorrelation.png figure
     """
 
-    # Set seed
-    np.random.seed(seed)
+    x,y,z = coords
+    # Plot the mean autocorrelation of random voxel
+    fig, axs = plt.subplots(1,2, sharey='all')
+    axs[0].acorr(data_noise[x,y,z,:], maxlags=30)
+    axs[1].acorr(data_noise_conv[x,y,z,:], maxlags=30)
 
-    # Set scaling
-    scaling = np.concatenate(((np.random.randn(dims)/SNR[0]), (np.random.randn(dims)/SNR[1])), 0)
-        
-    # Create single signal
-    x = np.arange(0,nTRs+window_size)
-    deg = np.random.randint(2,7)
-    poly_coeffs = np.random.randn(deg)
-    signal_fit = np.polyval(poly_coeffs,x)
-    signal_fit = zscore(signal_fit) + np.random.randn(len(x))
-    signal_fit = signal_fit/np.std(signal_fit)
-    signal_series = pd.Series(signal_fit)
-    signal_fit = signal_series.rolling(window_size+1).mean()
-
-    # Scale signal for each scaling and create offset signals
-    offsets_signals = np.full((nTRs, dims*2), np.nan)
-    for p in range(dims*2):
-        trend_scaled = signal_fit*scaling[p]
-        offsets_signals[:,p] = trend_scaled[window_size:(nTRs+window_size)]
+    # Set titles, labels
+    axs[0].set_title('PRE convolution')
+    axs[1].set_title('POST convolution')
     
-    return offsets_signals
-
-def affine_transformation(volume, movement_offsets, upscalefactor=1, printtimes=False):
+    for ax in fig.get_axes():
+        ax.set_xlabel('Lag')
+        ax.set_ylabel('Autocorrelation')
     
-    """
-    Applies affine transform to MRI volume given rotation and traslation offsets
-
-    Inputs:
-    - volume : original MRI volume, matrix of shape x by y by z
-    - movement_offsets : movement offsets, array of shape 6 (3 rotation and 3 traslation)
-    - upscalefactor : factor to which upscale image, int, upscalefactor == 1 means no upscaling; default = 1
-    - printtimes : bool, whether to print times for each operation (upscaling, transform, downscaling); default = False
-    
-    Outputs:
-    - trans_volume : transformed volume, matrix of shape x by y by z
-    """
-
-    tstart = time.time()
-    
-    # Upsample volume
-    if upscalefactor != 1:
-        volume = zoom(volume, upscalefactor, mode='nearest', order=0)
-    tupscale = time.time() - tstart
-
-    # Create rotation, shift and translation matrices
-    angles = -np.radians(np.array([movement_offsets[1], movement_offsets[2], movement_offsets[0]]))
-    shift = -np.array(volume.shape)/2 # shift to move origin to the center
-    displacement = -np.array([movement_offsets[4], movement_offsets[5], movement_offsets[3]])
-    
-    r = transform.SimilarityTransform(rotation=angles, dimensionality=3)
-    s = transform.SimilarityTransform(translation=shift, dimensionality=3)
-    t = transform.SimilarityTransform(translation=displacement, dimensionality=3)
-    
-    # Compose transforms by multiplying their matrices (mind the order of the operations)
-    trans_matrix = t.params @ np.linalg.inv(s.params) @ r.params @ s.params
-   
-    # Apply affine transform
-    trans_volume = affine_transform(volume, np.linalg.inv(trans_matrix))
-    ttransform = time.time() - tstart - tupscale
-
-    # Scale down to original resolution
-    if upscalefactor != 1:
-        trans_volume = zoom(trans_volume, 1/upscalefactor, mode='nearest', order=0)
-    tdownscale = time.time() - tstart - ttransform
-
-    if printtimes:
-        print('Time to upscale:{}s \nTime to transform:{}s \nTime to downscale:{}s'.format(tupscale, ttransform, tdownscale))
-    
-    return trans_volume
-
-def plot_transform(original, transformed, off, xyz=(64, 64, 19), save=None, cross=True):
-    
-    """
-    Plots 3d view of original and transformed MRI volumes
-
-    Inputs:
-    - original : matrix of shape x by y by s
-    - transformed : matrix of shape x by y by s (output of affine_transform)
-    - off : movement offsets, array of shape 6 (3 rotation and 3 traslation)
-    - xyz : tuple of len=3 indicating slices to show; default = (64, 64, 19)
-    - save : filename_suffix to save figure, if want to save; default = None
-    - cross : whether to add crosses indicating slices; default = True
-    
-    Outputs:
-    - saves or shows figure
-    """
-    
-    # Get slice coords
-    x,y,s = xyz
-    
-    # Create figure with 6 subplots
-    fig, axs = plt.subplots(3,2, gridspec_kw=dict(height_ratios=[128/38, 1, 1], width_ratios=[1,1]),  sharex=True, sharey=False)
-    
-    # Axial
-    axs[0,0].imshow(original[:,:,s])
-    axs[0,1].imshow(transformed[:,:,s])
-   
-    # Sagittal
-    axs[1,0].imshow(original[x,:,:].T)
-    axs[1,1].imshow(transformed[x,:,:].T)
-    
-    # Coronal
-    axs[2,0].imshow(original[:,y,:].T)
-    axs[2,1].imshow(transformed[:,y,:].T)
-    
-    # Invert axes
-    for ax in fig.axes:
-        ax.invert_yaxis()
-    
-    # Add crosses
-    if cross:
-        axs[0,0].axvline(y, lw=0.5, ls='--', color='r')
-        axs[0,1].axvline(y, lw=0.5, ls='--', color='r')
-        axs[0,0].axhline(x, lw=0.5, ls='--', color='r')
-        axs[0,1].axhline(x, lw=0.5, ls='--', color='r')
-
-        axs[1,0].axvline(y, lw=0.5, ls='--', color='r')
-        axs[1,1].axvline(y, lw=0.5, ls='--', color='r')
-        axs[1,0].axhline(s, lw=0.5, ls='--', color='r')
-        axs[1,1].axhline(s, lw=0.5, ls='--', color='r')
-
-        axs[2,0].axvline(x, lw=0.5, ls='--', color='r')
-        axs[2,1].axvline(x, lw=0.5, ls='--', color='r')
-        axs[2,0].axhline(s, lw=0.5, ls='--', color='r')
-        axs[2,1].axhline(s, lw=0.5, ls='--', color='r')
-
-    # Add Titles
-    axs[0,0].set_title('Original Volume', fontsize=12)
-    axs[0,1].set_title('Transformed Volume', fontsize=12)
-
-    axs[0,0].set_ylabel('Axial \n(z={})'.format(s))
-    axs[1,0].set_ylabel('Sagittal \n(x={})'.format(x))
-    axs[2,0].set_ylabel('Coronal \n(y={})'.format(y))
-
-    # Add transformation parameters
-    off = np.round(off,3)
-    plt.text(0.01, 0.99,
-             'traslation:\nx={}  y={}  z={}'.format(off[3], off[4], off[5]),
-             verticalalignment='top', horizontalalignment='left',
-             transform=plt.gcf().transFigure,
-             color='purple', fontsize=9)
-    
-    plt.text(0.51, 0.99,
-             'rotation:\npitch={}  roll={}  yaw={}'.format(off[0], off[1], off[2]),
-             verticalalignment='top', horizontalalignment='left',
-             transform=plt.gcf().transFigure,
-             color='green', fontsize=9)
-
-    # Save
-    if save:
-        plt.savefig(save)
-    else:
-        plt.show()
+    plt.suptitle('Autocorrelation of random voxel')
+    plt.savefig('trash/autocorrelation_{}.png'.format(str(coords)))
 
 def segment(volume, n_tissues=4, use_threshold=False, plot=False, save=None):
     
     """
-    Segment volume into n populations of voxels
+    Segment volume into n populations of voxels based on intensity (tissues)
 
     Inputs:
-    - volume : array, original MRI volume, matrix of shape x by y by z
+    - volume : array, 3d matrix of shape x by y by z, original MRI volume
     - n_tissues : int, number of populations to be segmented; default = 4 (air, white matter, grey matter, csf)
     - use_threshold : bool, whether to not consider voxels supposedly located outside of brain based on threshold; default = False
     - plot : bool, whether to plot histogram and gaussian of extracted populations; default = False
-    - save : str, whether (filename_suffix) to save tissues mask; default = None
+    - save : str, path where (whether) to save tissue mask as nifti file; default = None (don't save)
+    
     Outputs:
     - mat_max : array, matrix of shape x by y by z indicating membership for each voxel
+
+    Calls:
+    - save_images()
     """
     
     pname = 'GMM_{}'.format(n_tissues)
@@ -283,24 +252,26 @@ def segment(volume, n_tissues=4, use_threshold=False, plot=False, save=None):
 
     return mat_max
 
-def create_trend(nTRs, volume, tissues_mask, seed=0, TR=2, save=None):
+def add_trend(data_run, volume, tissues_mask, seed=0, TR=2, save=None):
     
     """
     Generate trend signal for each voxel
 
     Inputs:
-    - nTRs : int, duration of run in TR
-    - volume : array, original MRI volume, matrix of shape x by y by z
-    - tissues_mask : array, matrix of shape x by y by z indicating membership for each voxel (air, white matter, grey matter, csf)
-    - seed : int, seed for random generation; default = 0
-    - TR : int, default = 2
-    - save : str, whether (filename_suffix) to save polynomial coefficients; default = None
+    - data_run : array, 4d matrix of shape x by y by z by time, fMRI signal of single run
+    - volume : array, 3d matrix of shape x by y by z,  original MRI volume
+    - tissues_mask : array, 3d matrix of shape x by y by z, indicating membership for each voxel (air, white matter, grey matter, csf)
+    - seed : int, seed for random generation of polynomial coefficients; default = 0
+    - TR : int or float, fMRI resolution, in seconds; default = 2
+    - save : str, path where (whether) to save polynomial coefficients (4d matrix of shape x by y by z by poly_deg+1, indicating trend polynomial coefficients for each voxel) as nifti file; default = None (don't save)
     
     Outputs:
-    - trend : array, matrix of shape x by y by z by nTRs containing trend timeseries for each voxel
-    - poly_coeff_mat : array, matrix of shape x by y by z indicating trend polynomial coefficients for each voxel
+    - data_trend : array, 4d matrix of shape x by y by z by nTRs, containing fMRI signal with added trend timeseries for each voxel
     """
-    
+
+    # Get shape of run matrix
+    x,y,z,nTRs = data_run.shape
+
     # Get number of tissues
     tissues = np.unique(tissues_mask)
 
@@ -308,8 +279,8 @@ def create_trend(nTRs, volume, tissues_mask, seed=0, TR=2, save=None):
     poly_deg = 1 + round(TR*nTRs/150)
 
     # Initialize matrix of trend for each voxel get a time series of trends
-    trend = np.zeros((volume.shape[0], volume.shape[1], volume.shape[2], nTRs))
-    poly_coeff_mat = np.zeros((volume.shape[0], volume.shape[1], volume.shape[2], poly_deg+1))
+    trend = np.zeros(data_run.shape)
+    poly_coeff_mat = np.zeros((x,y,z, poly_deg+1))
     
     # Set seed
     np.random.seed(seed)
@@ -330,27 +301,69 @@ def create_trend(nTRs, volume, tissues_mask, seed=0, TR=2, save=None):
         trend[tissues_mask == tissue, :] = np.round(np.polyval(poly_scaled[:,tissue], np.arange(nTRs)))
         poly_coeff_mat[tissues_mask == tissue, :] = poly_scaled[:,tissue]
             
+    # Add trend to data
+    data_trend = data_run + trend
+
     # Save polynomial coefficients as nifti file
     if save:
         save_images(poly_coeff_mat, save)
 
-    return data_run+trend
+    return data_trend
 
-def get_motion_offsets_data(nTRs, path_reg, dimensions=(2,2,3), seed=0):
+def add_motion(data_run, dimensions, regressors_path, upscalefactor=1, seed=0, save=None):
+    
+    """
+    Generate motion regressors and transform signal for each voxel
+
+    Inputs:
+    - data :  array, 4d matrix of shape x by y by z by time, fMRI signal of single run
+    - dimensions : tuple, dimension of voxels in mm, used to scale offsets; default = (2,2,3)
+    - regressors_path : str, path where real data movement regressors are stored
+    - upscalefactor : int, factor to which upscale image if needed, upscalefactor == 1 means no upscaling; default = 1
+    - seed : int, seed for random selection of motion regressors real data; default = 0
+    - save : str, path where (whether) to save motion regressors as 1D file; default = None (don't save)
+    
+    Outputs:
+    - run_motion : array, 4d matrix of shape x by y by z by nTRs, containing fMRI signal with added motion for each voxel
+    
+    Calls:
+    - get_movoffset_fromdata()
+    - affine_transformation()
+    """
+    
+    # Get movement offsets
+    movement_offsets = get_movoffset_fromdata(data_run.shape[-1], regressors_path, dimensions=dimensions, seed=seed)
+    
+    # Initialize final matrix
+    run_motion = np.full(data_run.shape, np.nan)
+    
+    # Apply affine transform to each timepoint
+    for t in range(data_run.shape[-1]):
+        run_motion[:,:,:, t] = affine_transformation(data_run[:,:,:,t], movement_offsets[t,:], upscalefactor=upscalefactor)
+    
+    # Save movemet offsets
+    if save:
+        np.savetxt('data/simulazione_results/{}.1D'.format(save), movement_offsets, delimiter=' ')
+            
+    return run_motion
+
+def get_movoffset_fromdata(nTRs, regressors_path, dimensions=(2,2,3), seed=0):
     
     """
     Generate movement offsets signal along time starting from real data
 
     Inputs:
     - nTRs : int, number of TRs of wanted signal
+    - regressors_path : str, path where real data movement regressors are stored
     - dimensions : tuple, dimension of voxels in mm, used to scale offsets; default = (2,2,3)
-    - seed : int, seed for random generation; default = 0
+    - seed : int, seed for random selection of motion regressors real data; default = 0
+
     Outputs:
-    - offset_signals : signal for each movement offset, matrix of shape nTRs by n_dims*2
+    - offset_signals : array, 2d matrix of shape nTRs by n_dims*2, signal for each movement offset
     """
 
     # Load movement regressors of real subjects
-    sublist = os.listdir(path_reg)
+    sublist = os.listdir(regressors_path)
 
     # Set seed
     np.random.seed(seed)
@@ -387,94 +400,82 @@ def get_motion_offsets_data(nTRs, path_reg, dimensions=(2,2,3), seed=0):
     offset_signals = offset_signals / np.array([1,1,1, dimensions[0], dimensions[1], dimensions[2]])
     return offset_signals
 
-def generate_noise(data_signal, noise_level=4, TR=2, seed=0, save=None):
+def affine_transformation(volume, movement_offsets, upscalefactor=1, printtimes=False):
     
-    (x, y, slices, n_points) = data_signal.shape
-    
-    # Set seed
-    np.random.seed(seed)
+    """
+    Applies affine transform to MRI volume given rotation and traslation offsets
 
-    # Create gaussian noise
-    noise = np.random.randn(x, y, slices, n_points)*noise_level
-
-    # Convolve noise with HRF
-    noise_conv = convolve_HRF(noise, TR)
-
-    # Save noise
-    if save:
-        save_images(noise_conv, save)
-
-    return data_signal + noise_conv
-
-def downsample_timeshift(task, slices, task_time_res=0.05, TR=2):
+    Inputs:
+    - volume : array, 3d matrix of shape x by y by z, MRI volume at specific timepoint
+    - movement_offsets : array, 1d array of shape 6 (3 rotation and 3 traslation)
+    - upscalefactor : int, factor to which upscale image, upscalefactor == 1 means no upscaling; default = 1
+    - printtimes : bool, whether to print times for each operation (upscaling, transform, downscaling); default = False
     
-    # Get dimensions
-    n_points = int(task.shape[0]/TR*task_time_res)
+    Outputs:
+    - trans_volume : array, d matrix of shape x by y by z, transformed MRI volume
+    """
 
-    # Downsample convolved regressors back to TR resolution and add timeshift for each slice
-    task_downsampled_byslice = np.full((slices, n_points, task.shape[1]), np.nan)
-    for t in range(n_points):
-        for s in range(slices):
-            task_downsampled_byslice[s,t,:] = task[int(t*TR/task_time_res) + s]
+    tstart = time.time()
     
-    return task_downsampled_byslice
-    
-def seminate_mask(task, mask, SNR=5, seed=0):
-    # Set seed
-    np.random.seed(seed)
-    
-    # Initialize data matrix
-    data_signal = np.zeros((mask.shape[0], mask.shape[1], mask.shape[2], task.shape[1]))
+    # Upsample volume
+    if upscalefactor != 1:
+        volume = zoom(volume, upscalefactor, mode='nearest', order=0)
+    tupscale = time.time() - tstart
 
-    # Create signal by multiply task data by random betas
-    betas = np.random.randn(task.shape[2])
-    signal = np.dot(task, betas)
+    # Create rotation, shift and translation matrices
+    angles = -np.radians(np.array([movement_offsets[1], movement_offsets[2], movement_offsets[0]]))
+    shift = -np.array(volume.shape)/2 # shift to move origin to the center
+    displacement = -np.array([movement_offsets[4], movement_offsets[5], movement_offsets[3]])
     
-    # Get mask indices
-    (x_inds, y_inds, z_inds) = np.where(mask == 1)
+    r = transform.SimilarityTransform(rotation=angles, dimensionality=3)
+    s = transform.SimilarityTransform(translation=shift, dimensionality=3)
+    t = transform.SimilarityTransform(translation=displacement, dimensionality=3)
+    
+    # Compose transforms by multiplying their matrices (mind the order of the operations)
+    trans_matrix = t.params @ np.linalg.inv(s.params) @ r.params @ s.params
+   
+    # Apply affine transform
+    trans_volume = affine_transform(volume, np.linalg.inv(trans_matrix))
+    ttransform = time.time() - tstart - tupscale
 
-    # Add noise (scaled by SNR factor) and assign signal to each voxel within mask
-    noise = np.random.randn(x_inds.shape[0]) + SNR
-    data_signal[x_inds, y_inds, z_inds, :] = (signal[z_inds].T*noise).T
+    # Scale down to original resolution
+    if upscalefactor != 1:
+        trans_volume = zoom(trans_volume, 1/upscalefactor, mode='nearest', order=0)
+    tdownscale = time.time() - tstart - ttransform
 
-    return data_signal
-
-def generate_motion(data, dimensions, regressors_path, upscalefactor=1, seed=0, save=None):
+    if printtimes:
+        print('Time to upscale:{}s \nTime to transform:{}s \nTime to downscale:{}s'.format(tupscale, ttransform, tdownscale))
     
-    # Get movement offsets
-    movement_offsets = get_motion_offsets_data(data.shape[-1], regressors_path, dimensions=dimensions, seed=seed)
-    
-    # Initialize final matrix
-    run_motion = np.full(data.shape, np.nan)
-    
-    # Apply affine transform to each timepoint
-    for t in range(data.shape[-1]):
-        run_motion[:,:,:, t] = affine_transformation(data[:,:,:,t], movement_offsets[t,:], upscalefactor=upscalefactor)
-    
-    # Save movemet offsets
-    if save:
-        np.savetxt('data/simulazione_results/{}.1D'.format(save), movement_offsets, delimiter=' ')
-            
-    return run_motion
+    return trans_volume
 
 def save_images(img_tosave, path):
+    
+    """
+    Save matrix as nifti file 
+    
+    Inputs:
+    - img_tosave : array, 4d or 3d matrix to save as image
+    - path : str, subfolders and filename
+
+    !!! USES GLOBAL VARIABLE data_nii !!!
+    """
+
     img = image.new_img_like(data_nii, img_tosave, affine=data_nii.affine, copy_header=True)
     img.to_filename('data/simulazione_results/{}.nii'.format(path))
-    
 
 if __name__ == '__main__':
     tstart = time.time()
 
     # Define options
     n_subs = 1
-    add_noise = True
-    add_trend = True
-    add_motion = True
+    add_noise_bool = True
+    add_trend_bool = True
+    add_motion_bool = True
     
     # Saving options
     save = True
     filename_prefix = 'simul'
-    filename_suffix = 'debug2'
+    filename_suffix = 'debug'
 
     # Print output to txt file
     orig_stdout = sys.stdout
@@ -533,10 +534,10 @@ if __name__ == '__main__':
         data_signal = seminate_mask(task_downsampled_byslice, semination_mask, SNR, seed_schema[sub,-1])
         print('Sub {}. Done with: creating fMRI signal from task. It took:  {}  seconds'.format(sub+1, time.time() - tstart))
 
-        # Generate and add noise
-        if add_noise:
+        # Generate and add noise in all voxels
+        if add_noise_bool:
             filename_prefix += '_noise'
-            data_signal = generate_noise(data_signal, noise_level, TR, seed_schema[sub,-2], save='sub{}/noise/noise_{}'.format(sub+1, filename_suffix)) #save=filename_suffix
+            data_signal = add_noise(data_signal, noise_level, TR, seed_schema[sub,-2], save='sub{}/noise/noise_{}'.format(sub+1, filename_suffix), check_autocorr=False) #save=filename_suffix
         print('Sub {}. Done with: generating and adding noise. It took:  {}  seconds'.format(sub+1, time.time() - tstart))
 
         # Segment
@@ -551,15 +552,13 @@ if __name__ == '__main__':
             filename_suffixr = '_run{}_{}'.format(r+1, filename_suffix)
 
             # Get data of single run
-            run_len = run_dur_TR[r]
-            
             run_idx = [*range(run_cuts[r][0], run_cuts[r][1])]
             data_run = data_signal[:,:,:,run_idx]
 
             # Generate Trend (for each run separately)
-            if add_trend:
+            if add_trend_bool:
                 filename_prefixr += '_trend' 
-                data_run = create_trend(run_len, fmri_data, tissues_mask, seed=seed_schema[sub,r], save='sub{}/trend/polycoeffs{}'.format(sub+1, filename_suffixr)) # save=None
+                data_run = add_trend(data_run, fmri_data, tissues_mask, seed=seed_schema[sub,r], save='sub{}/trend/polycoeffs{}'.format(sub+1, filename_suffixr)) # save=None
             print('Sub {}. Done with: generating trend for run {}. It took:  {}  seconds'.format(sub+1, r+1, time.time() - tstart))
                 
             # Zscore
@@ -568,9 +567,9 @@ if __name__ == '__main__':
             print('Sub {}. Done with: zscoring for run {}. It took:  {}  seconds'.format(sub+1, r+1, time.time() - tstart))
 
             # Add motion
-            if add_motion:        
+            if add_motion_bool:        
                 filename_prefixr += '_motion'
-                data_run = generate_motion(data_run, dimensions=voxel_dims_mm, upscalefactor=movement_upscale, regressors_path=regressors_path, seed=seed_schema[sub, n_runs+r], save='sub{}/motionreg/movement_offs{}'.format(sub+1, filename_suffixr)) # save=None
+                data_run = add_motion(data_run, dimensions=voxel_dims_mm, upscalefactor=movement_upscale, regressors_path=regressors_path, seed=seed_schema[sub, n_runs+r], save='sub{}/motionreg/movement_offs{}'.format(sub+1, filename_suffixr)) # save=None
             print('Sub {}. Done with: adding motion for run {}. It took:  {}  seconds'.format(sub+1, r+1, time.time() - tstart))
                 
             # Save data
