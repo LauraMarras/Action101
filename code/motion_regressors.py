@@ -8,13 +8,14 @@ import time
 from matplotlib import pyplot as plt
 import os
 
-def get_movement_offsets(nTRs, dims=3, window_size=3, seed=0):
+def get_movement_offsets(nTRs, SNR, dims=3, window_size=3, seed=0):
     
     """
     Generate movement offsets signal along time
 
     Inputs:
     - nTRs : int, number of TRs of wanted signal
+    - SNR : tuple of int, signal to noise, determines how much to scale offsets for rotation and traslation
     - dims : int, dimensionality of volume; default = 3
     - window_size : int, size (number of TRs) of window used for smoothing signal; default = 3
     - seed : seed for the random generation; default = 0
@@ -27,7 +28,7 @@ def get_movement_offsets(nTRs, dims=3, window_size=3, seed=0):
     np.random.seed(seed)
 
     # Set scaling
-    scaling = np.concatenate(((np.random.randn(dims)/10), (np.random.randn(dims)/3)), 0)
+    scaling = np.concatenate(((np.random.randn(dims)/SNR[0]), (np.random.randn(dims)/SNR[1])), 0)
         
     # Create single signal
     x = np.arange(0,nTRs+window_size)
@@ -122,7 +123,7 @@ def plot_transform(original, transformed, off, xyz=(64, 64, 19), save=None, cros
     - transformed : matrix of shape x by y by s (output of affine_transform)
     - off : movement offsets, array of shape 6 (3 rotation and 3 traslation)
     - xyz : tuple of len=3 indicating slices to show; default = (64, 64, 19)
-    - save : filename to save figure, if want to save; default = None
+    - save : filename_suffix to save figure, if want to save; default = None
     - cross : whether to add crosses indicating slices; default = True
     
     Outputs:
@@ -177,7 +178,7 @@ def plot_transform(original, transformed, off, xyz=(64, 64, 19), save=None, cros
     axs[2,0].set_ylabel('Coronal \n(y={})'.format(y))
 
     # Add transformation parameters
-    off = [round(c,3) for c in movement_offsets]
+    off = np.round(off,3)
     plt.text(0.01, 0.99,
              'traslation:\nx={}  y={}  z={}'.format(off[3], off[4], off[5]),
              verticalalignment='top', horizontalalignment='left',
@@ -195,7 +196,6 @@ def plot_transform(original, transformed, off, xyz=(64, 64, 19), save=None, cros
         plt.savefig(save)
     else:
         plt.show()
-
 
 def get_motion_offsets_data(nTRs, path_reg, dimensions=(2,2,3)):
     
