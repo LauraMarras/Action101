@@ -279,7 +279,7 @@ def segment(volume, n_tissues=4, use_threshold=False, plot=False, save=None):
 
     # Save
     if save:
-        save_images(mat_max, 'mask/mask_{}'.format(save))
+        save_images(mat_max, save)
 
     return mat_max
 
@@ -332,7 +332,7 @@ def create_trend(nTRs, volume, tissues_mask, seed=0, TR=2, save=None):
             
     # Save polynomial coefficients as nifti file
     if save:
-        save_images(poly_coeff_mat, 'trend/polycoeffs{}'.format(save))
+        save_images(poly_coeff_mat, save)
 
     return data_run+trend
 
@@ -402,7 +402,7 @@ def generate_noise(data_signal, noise_level=4, TR=2, seed=0, save=None):
 
     # Save noise
     if save:
-        save_images(noise_conv, 'noise/noise_{}'.format(save))
+        save_images(noise_conv, save)
 
     return data_signal + noise_conv
 
@@ -453,7 +453,7 @@ def generate_motion(data, dimensions, regressors_path, upscalefactor=1, seed=0, 
     
     # Save movemet offsets
     if save:
-        np.savetxt('data/simulazione_results/motionreg/movement_offs_{}.1D'.format(save), movement_offsets, delimiter=' ')
+        np.savetxt('data/simulazione_results/{}.1D'.format(save), movement_offsets, delimiter=' ')
             
     return run_motion
 
@@ -466,7 +466,7 @@ if __name__ == '__main__':
     tstart = time.time()
 
     # Define options
-    n_subs = 10
+    n_subs = 1
     add_noise = True
     add_trend = True
     add_motion = True
@@ -474,7 +474,7 @@ if __name__ == '__main__':
     # Saving options
     save = True
     filename_prefix = 'simul'
-    filename_suffix = 'debug'
+    filename_suffix = 'debug2'
 
     # Print output to txt file
     orig_stdout = sys.stdout
@@ -499,91 +499,94 @@ if __name__ == '__main__':
     # Define task parameters
     task_time_res = 0.05
     run_dur_sec = [536,450,640,650,472,480] # duration of each run in seconds
-    run_dur = (np.array(run_dur_sec)/TR).astype(int) # duration of each run in TRs
-    run_times = np.array(list(zip((np.cumsum(run_dur) - run_dur), np.cumsum(run_dur))))
+    run_dur_TR = (np.array(run_dur_sec)/TR).astype(int) # duration of each run in TRs
+    run_cuts = np.array(list(zip((np.cumsum(run_dur_TR) - run_dur_TR), np.cumsum(run_dur_TR))))
     n_runs = len(run_dur_sec)
 
-    # Set seed
-    seed_mat = np.reshape(np.arange(0,((n_runs*2)+2)*n_subs), (n_subs,n_runs*2+2))
+    # Create seed schema
+    seed_schema = np.reshape(np.arange(0,((n_runs*2)+2)*n_subs), (n_subs,n_runs*2+2))
 
     # Sub loop
-    sub = 0 
+    for sub in range(n_subs):
 
-    # Load fMRI data and Mask (voxels where to seminate task signal)
-    data_nii = image.load_img('data/simulazione_datasets/run1_template.nii')
-    mask_nii = image.load_img('data/simulazione_datasets/atlas_2orig.nii')
+        # Load fMRI data and Mask (voxels where to seminate task signal)
+        data_nii = image.load_img('data/simulazione_datasets/sub{}/run1_template.nii'.format(sub+1))
+        mask_nii = image.load_img('data/simulazione_datasets/sub{}/atlas_2orig.nii'.format(sub+1))
 
-    fmri_data = data_nii.get_fdata()[:,:,:,0] # Get single volume
-    semination_mask = mask_nii.get_fdata()
+        fmri_data = data_nii.get_fdata()[:,:,:,0] # Get single volume
+        semination_mask = mask_nii.get_fdata()
 
-    # Get n_voxels and slices, mean and std
-    voxel_dims_mm = tuple(data_nii.header._structarr['pixdim'][1:4])
-    x,y,slices,_ = data_nii.shape
+        # Get n_voxels and slices, mean and std
+        voxel_dims_mm = tuple(data_nii.header._structarr['pixdim'][1:4])
+        x,y,slices,_ = data_nii.shape
 
-    data_avg = np.mean(data_nii.get_fdata(), axis=3) # problema se carichiamo solo un volume!!
-    data_std = np.std(data_nii.get_fdata(), axis=3, ddof=1)
+        data_avg = np.mean(data_nii.get_fdata(), axis=3) # problema se carichiamo solo un volume!!
+        data_std = np.std(data_nii.get_fdata(), axis=3, ddof=1)
 
-    print('Done with: loading data, defining parameters. It took:    ', time.time() - tstart, '  seconds')
+        print('Sub {}. Done with: loading data, defining parameters. It took:  {}  seconds'.format(sub+1, time.time() - tstart))
 
-    # Downsample convolved regressors back to TR resolution and add timeshift for each slice    
-    task_downsampled_byslice = downsample_timeshift(task, slices, task_time_res, TR)
-    print('Done with: downsampling and adding timeshift. It took:    ', time.time() - tstart, '  seconds')
+        # Downsample convolved regressors back to TR resolution and add timeshift for each slice    
+        task_downsampled_byslice = downsample_timeshift(task, slices, task_time_res, TR)
+        print('Sub {}. Done with: downsampling and adding timeshift. It took:  {}  seconds'.format(sub+1, time.time() - tstart))
 
-    # Create fMRI signal starting from task and seminate only in mask
-    data_signal = seminate_mask(task_downsampled_byslice, semination_mask, SNR, seed_mat[sub,-1])
-    print('Done with: creating fMRI signal from task. It took:    ', time.time() - tstart, '  seconds')
+        # Create fMRI signal starting from task and seminate only in mask
+        data_signal = seminate_mask(task_downsampled_byslice, semination_mask, SNR, seed_schema[sub,-1])
+        print('Sub {}. Done with: creating fMRI signal from task. It took:  {}  seconds'.format(sub+1, time.time() - tstart))
 
-    # Generate and add noise
-    if add_noise:
-        filename_prefix += '_noise'
-        data_signal = generate_noise(data_signal, noise_level, TR, seed_mat[sub,-2], save=filename_suffix) #save=filename_suffix
-    print('Done with: generating and adding noise. It took:    ', time.time() - tstart, '  seconds')
+        # Generate and add noise
+        if add_noise:
+            filename_prefix += '_noise'
+            data_signal = generate_noise(data_signal, noise_level, TR, seed_schema[sub,-2], save='sub{}/noise/noise_{}'.format(sub+1, filename_suffix)) #save=filename_suffix
+        print('Sub {}. Done with: generating and adding noise. It took:  {}  seconds'.format(sub+1, time.time() - tstart))
 
-    # Segment
-    tissues_mask = segment(fmri_data, n_tissues, use_threshold=False, plot=False, save=filename_suffix) #save=None
-    print('Done with: segmenting. It took:    ', time.time() - tstart, '  seconds')
-
-    # Iterate over runs
-    for r in range(n_runs):
-
-        # Set filename for each run
-        filename_prefixr = ''
-        filename_suffixr = '_run{}_{}'.format(r+1, filename_suffix)
-
-        # Get data of single run
-        run_len = run_dur[r]
+        # Segment
+        tissues_mask = segment(fmri_data, n_tissues, use_threshold=False, plot=False, save='sub{}/mask/mask_{}'.format(sub+1, filename_suffix)) #save=None
+        print('Sub {}. Done with: segmenting. It took:  {}  seconds'.format(sub+1, time.time() - tstart))
         
-        run_idx = [*range(run_times[r][0], run_times[r][1])]
-        data_run = data_signal[:,:,:,run_idx]
+        # Iterate over runs
+        for r in range(n_runs):
 
-        # Generate Trend (for each run separately)
-        if add_trend:
-            filename_prefixr += '_trend' 
-            data_run = create_trend(run_len, fmri_data, tissues_mask, seed=seed_mat[sub,r], save=filename_suffixr) # save=None
-        print('Done with: generating trend for run {}. It took:    '.format(r+1), time.time() - tstart, '  seconds')
+            # Set filename for each run
+            filename_prefixr = ''
+            filename_suffixr = '_run{}_{}'.format(r+1, filename_suffix)
+
+            # Get data of single run
+            run_len = run_dur_TR[r]
             
-        # Zscore
-        run_zscore = zscore((data_run), axis=3, nan_policy='omit')
-        data_run = run_zscore * np.expand_dims(data_std, axis=3) + np.expand_dims(data_avg, axis=3) #problema se carichiamo solo un volume
-        print('Done with: zscoring for run {}. It took:    '.format(r+1), time.time() - tstart, '  seconds')
+            run_idx = [*range(run_cuts[r][0], run_cuts[r][1])]
+            data_run = data_signal[:,:,:,run_idx]
 
-        # Add motion
-        if add_motion:        
-            filename_prefixr += '_motion'
-            data_run = generate_motion(data_run, dimensions=voxel_dims_mm, upscalefactor=movement_upscale, regressors_path=regressors_path, seed=seed_mat[sub, n_runs+r], save=filename_suffixr) # save=None
-        print('Done with: adding motion for run {}. It took:    '.format(r+1), time.time() - tstart, '  seconds')
+            # Generate Trend (for each run separately)
+            if add_trend:
+                filename_prefixr += '_trend' 
+                data_run = create_trend(run_len, fmri_data, tissues_mask, seed=seed_schema[sub,r], save='sub{}/trend/polycoeffs{}'.format(sub+1, filename_suffixr)) # save=None
+            print('Sub {}. Done with: generating trend for run {}. It took:  {}  seconds'.format(sub+1, r+1, time.time() - tstart))
+                
+            # Zscore
+            run_zscore = zscore((data_run), axis=3, nan_policy='omit')
+            data_run = run_zscore * np.expand_dims(data_std, axis=3) + np.expand_dims(data_avg, axis=3) #problema se carichiamo solo un volume
+            print('Sub {}. Done with: zscoring for run {}. It took:  {}  seconds'.format(sub+1, r+1, time.time() - tstart))
+
+            # Add motion
+            if add_motion:        
+                filename_prefixr += '_motion'
+                data_run = generate_motion(data_run, dimensions=voxel_dims_mm, upscalefactor=movement_upscale, regressors_path=regressors_path, seed=seed_schema[sub, n_runs+r], save='sub{}/motionreg/movement_offs{}'.format(sub+1, filename_suffixr)) # save=None
+            print('Sub {}. Done with: adding motion for run {}. It took:  {}  seconds'.format(sub+1, r+1, time.time() - tstart))
+                
+            # Save data
+            if save: 
+                image_final = image.new_img_like(data_nii, data_run, affine = data_nii.affine, copy_header=True)
+                image_final.header._structarr['slice_duration'] = TR
+                image_final.header._structarr['pixdim'][4] = TR
+                image_final.to_filename('data/simulazione_results/sub{}/fmri/{}{}.nii'.format(sub+1,filename_prefix+filename_prefixr, filename_suffixr))
             
-        # Save data
-        if save: 
-            image_final = image.new_img_like(data_nii, data_run, affine = data_nii.affine, copy_header=True)
-            image_final.header._structarr['slice_duration'] = TR
-            image_final.header._structarr['pixdim'][4] = TR
-            image_final.to_filename('data/simulazione_results/fmri/{}{}.nii'.format(filename_prefix+filename_prefixr, filename_suffixr))
-        
-    print('Done with: all. It took:    '.format(r+1), time.time() - tstart, '  seconds')
-        
+        print('Sub {}. Done with: all. It took:  {}  seconds'.format(sub+1, time.time() - tstart))
+    
+    
+    print('Done with: all {} subjects. It took:  {}  seconds'.format(n_subs, time.time() - tstart))
+    
     # Close logfile
     sys.stdout = orig_stdout
     logfile.close()
 
-    print('finished____')
+    print('finished')
