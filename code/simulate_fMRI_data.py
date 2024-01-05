@@ -463,19 +463,13 @@ def save_images(img_tosave, path):
     img = image.new_img_like(data_nii, img_tosave, affine=data_nii.affine, copy_header=True)
     img.to_filename('data/simulazione_results/{}.nii'.format(path))
 
-if __name__ == '__main__':
+def simulation_pipeline(n_subs, add_noise_bool, add_trend_bool, add_motion_bool, save, filename_suffix='debug'):
+    
+    # Profiling
     tstart = time.time()
 
-    # Define options
-    n_subs = 1
-    add_noise_bool = True
-    add_trend_bool = True
-    add_motion_bool = True
-    
-    # Saving options
-    save = True
+    # Save options
     filename_prefix = 'simul'
-    filename_suffix = 'debug'
 
     # Print output to txt file
     orig_stdout = sys.stdout
@@ -494,7 +488,7 @@ if __name__ == '__main__':
     
     # Load task data
     data_path = 'data/models/Domains/group_us_conv_'
-    task = np.loadtxt(data_path + 'agent_objective.csv', delimiter=',', skiprows=1)[:, 1:]
+    task = np.loadtxt(data_path + 'agent_objective.csv', delimiter=',', skiprows=1)[:, 1]
     task = np.atleast_2d(task.T).T
 
     # Define task parameters
@@ -589,3 +583,18 @@ if __name__ == '__main__':
     logfile.close()
 
     print('finished')
+
+if __name__ == '__main__':
+    
+    # Define options
+    n_subs = 1
+    add_noise_bool = True
+    add_trend_bool = True
+    add_motion_bool = True
+    
+    # Saving options
+    save = True
+    filename_suffix = 'debug_singlecol'
+    
+    # Call Pipeline
+    simulation_pipeline(n_subs, add_noise_bool, add_trend_bool, add_motion_bool, save, filename_suffix)
