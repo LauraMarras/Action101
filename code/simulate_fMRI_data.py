@@ -505,6 +505,7 @@ def simulation_pipeline(n_subs, add_noise_bool, add_trend_bool, add_motion_bool,
     for sub in range(n_subs):
 
         # Load fMRI data and Mask (voxels where to seminate task signal)
+        global data_nii
         data_nii = image.load_img('data/simulazione_datasets/sub{}/run1_template.nii'.format(sub+1))
         mask_nii = image.load_img('data/simulazione_datasets/sub{}/atlas_2orig.nii'.format(sub+1))
 
