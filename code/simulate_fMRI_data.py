@@ -378,7 +378,7 @@ def get_movoffset_fromdata(nTRs, regressors_path, dimensions=(2,2,3), seed=0):
     temp = nTRs
     c = 0
     for s in subs:
-        sub = np.genfromtxt(path_reg + sublist[s] + '/derivatives/rest_mocopar.1D')
+        sub = np.genfromtxt(regressors_path + sublist[s] + '/derivatives/rest_mocopar.1D')
         idx = np.min((temp, sub.shape[0]))
 
         sub = sub - sub[0,:]         
