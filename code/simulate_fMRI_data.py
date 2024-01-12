@@ -6,6 +6,7 @@ from matplotlib import pyplot as plt
 from nilearn import image
 from scipy.stats import zscore, norm
 from scipy.ndimage import zoom, affine_transform
+from scipy.signal import correlate
 from skimage import transform
 from sklearn.mixture import GaussianMixture
 
@@ -35,14 +36,15 @@ def downsample_timeshift(task, n_slices, task_time_res=0.05, TR=2):
     
     return task_downsampled_byslice
 
-def seminate_mask(task, ROI_mask, SNR=5, seed=0):
+def seminate_mask(task, ROI_mask, data_noise, SNR=5, seed=0):
     
     """
     Create fMRI signal based on task regressors and assign it to ROI
 
     Inputs:
-    - task : array, 2d matrix of shape = n_timepoints (in TR resolution) by n_task_regressor(s)
+    - task : array, 3d matrix of shape = n_timepoints (in TR resolution) by slices by n_task_regressor(s)
     - ROI_mask : array, 3d matrix of booleans of shape = x by y by z indicating voxel within ROI
+    - data_noise : 
     - SNR : int or float, indicates signal to noise ratio; default = 5
     - seed : int, seed for random generation of betas; default = 0
 
@@ -53,21 +55,39 @@ def seminate_mask(task, ROI_mask, SNR=5, seed=0):
     # Set seed
     np.random.seed(seed)
     
-    # Initialize data matrix
-    data_signal = np.zeros((ROI_mask.shape[0], ROI_mask.shape[1], ROI_mask.shape[2], task.shape[1]))
-
     # Create signal by multiply task data by random betas
-    betas = np.random.randn(task.shape[2])
+    betas = np.abs(np.random.randn(task.shape[2]))
     signal = np.dot(task, betas)
     
     # Get mask indices
     (x_inds, y_inds, z_inds) = np.where(ROI_mask == 1)
+    (x_inds_n, y_inds_n, z_inds_n) = np.where(ROI_mask != 1)
 
     # Add noise (scaled by SNR factor) and assign signal to each voxel within mask
-    noise = np.random.randn(x_inds.shape[0]) + SNR
-    data_signal[x_inds, y_inds, z_inds, :] = (signal[z_inds].T*noise).T
+    noise = np.random.randn(x_inds.shape[0]) * SNR!=0 + SNR
+    data_noise[x_inds, y_inds, z_inds, :] += (signal[z_inds].T*noise).T
 
-    return data_signal
+    # Check correlation
+    rlist = np.empty(0)
+    for c in range(task.shape[2]):
+        for slice in np.unique(z_inds):
+            x_inds2 = x_inds[np.where(z_inds == slice)]
+            y_inds2 = y_inds[np.where(z_inds == slice)]
+            z_inds2 = z_inds[np.where(z_inds == slice)]
+            
+            sig2corr = data_noise[x_inds2, y_inds2, z_inds2, :]
+
+            rlist = np.concatenate((rlist, np.corrcoef(task[slice,:, c], sig2corr)[0][1:]))
+        
+        
+        rnlist = np.concatenate((rnlist, np.corrcoef(task[0, :, c], data_noise[x_inds_n[:20], y_inds_n[:20], z_inds_n[:20], :])[0][1:]))
+
+    r = np.max(rlist)
+
+
+
+
+    return data_noise
 
 def add_noise(data_signal, noise_level=4, TR=2, seed=0, save=None, check_autocorr=False):
     
@@ -178,6 +198,7 @@ def autocorr_diff(data_noise, data_noise_conv, coords=(0,0,0)):
     plt.suptitle('Autocorrelation of random voxel')
     plt.savefig('trash/autocorrelation_{}.png'.format(str(coords)))
 
+
 def segment(volume, n_tissues=4, use_threshold=False, plot=False, save=None):
     
     """
@@ -252,7 +273,7 @@ def segment(volume, n_tissues=4, use_threshold=False, plot=False, save=None):
 
     return mat_max
 
-def add_trend(data_run, volume, tissues_mask, seed=0, TR=2, save=None):
+def add_trend(data_run, volume, tissues_mask, scale_parameter=100, n_bins=1, seed=0, TR=2, save=None):
     
     """
     Generate trend signal for each voxel
@@ -261,6 +282,8 @@ def add_trend(data_run, volume, tissues_mask, seed=0, TR=2, save=None):
     - data_run : array, 4d matrix of shape x by y by z by time, fMRI signal of single run
     - volume : array, 3d matrix of shape x by y by z,  original MRI volume
     - tissues_mask : array, 3d matrix of shape x by y by z, indicating membership for each voxel (air, white matter, grey matter, csf)
+    - scale_parameter : int, empirical estimated parameter to scale polynomial coefficients; default = 100
+    - n_bins : int, number of bins for adding variation to trend coefficients within tissues; default = 1 (that is, no variation)
     - seed : int, seed for random generation of polynomial coefficients; default = 0
     - TR : int or float, fMRI resolution, in seconds; default = 2
     - save : str, path where (whether) to save polynomial coefficients (4d matrix of shape x by y by z by poly_deg+1, indicating trend polynomial coefficients for each voxel) as nifti file; default = None (don't save)
@@ -292,14 +315,29 @@ def add_trend(data_run, volume, tissues_mask, seed=0, TR=2, save=None):
     poly_sorted = np.sort(random_coeffs, axis=1)
     
     scale_poly_order = np.append(np.power(10, np.arange(2,(poly_deg)*2 +1,2))[::-1], 1)
-    scale_tissue = np.array([np.mean(volume[np.where(tissues_mask == tissue)]) for tissue in tissues])/np.mean(volume)/100
+    scale_tissue = np.array([np.mean(volume[np.where(tissues_mask == tissue)]) for tissue in tissues])/np.mean(volume)/scale_parameter
     
     poly_scaled = poly_sorted / scale_poly_order[:, None] * scale_tissue
 
     # Create trend time series for each tissue and assign to matrix using tissue mask
-    for tissue in tissues:
-        trend[tissues_mask == tissue, :] = np.round(np.polyval(poly_scaled[:,tissue], np.arange(nTRs)))
-        poly_coeff_mat[tissues_mask == tissue, :] = poly_scaled[:,tissue]
+    for tissue in tissues[1:]:
+        n_vox_tiss = np.sum(tissues_mask == tissue)
+        bin_size = ((n_vox_tiss - n_vox_tiss%n_bins)/n_bins).astype(int)
+        drawn = np.random.choice(n_vox_tiss-n_vox_tiss%n_bins, (n_bins, bin_size), replace=False)
+        resto = np.arange(n_vox_tiss)[~np.isin(np.arange(n_vox_tiss),drawn)]
+             
+        for v in range(n_bins):
+            xinds, y_inds, z_inds = (np.where(tissues_mask == tissue)[0][drawn[v]], np.where(tissues_mask == tissue)[1][drawn[v]], np.where(tissues_mask == tissue)[2][drawn[v]])
+            
+            poly_jitt = np.abs(poly_scaled[:,tissue]/10*np.random.randn())+poly_scaled[:,tissue]
+            trend[xinds, y_inds, z_inds, :] = np.round(np.polyval(poly_jitt, np.arange(nTRs)))
+            poly_coeff_mat[xinds, y_inds, z_inds, :] = poly_jitt
+
+        if len(resto) != 0:
+            xinds, y_inds, z_inds = (np.where(tissues_mask == tissue)[0][resto], np.where(tissues_mask == tissue)[1][resto], np.where(tissues_mask == tissue)[2][resto])
+            poly_jitt = np.abs(poly_scaled[:,tissue]/10*np.random.randn())+poly_scaled[:,tissue]
+            trend[xinds, y_inds, z_inds, :] = np.round(np.polyval(poly_jitt, np.arange(nTRs)))
+            poly_coeff_mat[xinds, y_inds, z_inds, :] = poly_jitt
             
     # Add trend to data
     data_trend = data_run + trend
@@ -332,7 +370,7 @@ def add_motion(data_run, dimensions, regressors_path, upscalefactor=1, seed=0, s
     """
     
     # Get movement offsets
-    movement_offsets = get_movoffset_fromdata(data_run.shape[-1], regressors_path, dimensions=dimensions, seed=seed)
+    movement_offsets, mov_offs_notscaled = get_movoffset_fromdata(data_run.shape[-1], regressors_path, dimensions=dimensions, seed=seed)
     
     # Initialize final matrix
     run_motion = np.full(data_run.shape, np.nan)
@@ -341,9 +379,9 @@ def add_motion(data_run, dimensions, regressors_path, upscalefactor=1, seed=0, s
     for t in range(data_run.shape[-1]):
         run_motion[:,:,:, t] = affine_transformation(data_run[:,:,:,t], movement_offsets[t,:], upscalefactor=upscalefactor)
     
-    # Save movemet offsets
+    # Save movemet offsets --> save non scaled
     if save:
-        np.savetxt('data/simulazione_results/{}.1D'.format(save), movement_offsets, delimiter=' ')
+        np.savetxt('data/simulazione_results/{}.1D'.format(save), mov_offs_notscaled, delimiter=' ')
             
     return run_motion
 
@@ -359,7 +397,8 @@ def get_movoffset_fromdata(nTRs, regressors_path, dimensions=(2,2,3), seed=0):
     - seed : int, seed for random selection of motion regressors real data; default = 0
 
     Outputs:
-    - offset_signals : array, 2d matrix of shape nTRs by n_dims*2, signal for each movement offset
+    - offset_signals_scaled : array, 2d matrix of shape nTRs by n_dims*2, signal for each movement offset, scaled by voxel dimensions
+    - offset_signals : array, 2d matrix of shape nTRs by n_dims*2, signal for each movement offset, not scaled
     """
 
     # Load movement regressors of real subjects
@@ -368,17 +407,14 @@ def get_movoffset_fromdata(nTRs, regressors_path, dimensions=(2,2,3), seed=0):
     # Set seed
     np.random.seed(seed)
 
-    # Randomly pick 3 subjects
-    subs = np.random.randint(0, len(sublist), 3)
-
     # Initialize offset array
     offset_signals = np.full((nTRs, len(dimensions)*2), np.nan)
 
     # 
     temp = nTRs
     c = 0
-    for s in subs:
-        sub = np.genfromtxt(regressors_path + sublist[s] + '/derivatives/rest_mocopar.1D')
+    while temp > 0:
+        sub = np.genfromtxt(regressors_path + sublist.pop(np.random.randint(0, len(sublist))) + '/derivatives/rest_mocopar.1D')
         idx = np.min((temp, sub.shape[0]))
 
         sub = sub - sub[0,:]         
@@ -392,13 +428,10 @@ def get_movoffset_fromdata(nTRs, regressors_path, dimensions=(2,2,3), seed=0):
 
         c+=len(sub)
         temp -= len(sub)
-
-        if temp <= 0:
-            break
     
     # scale
-    offset_signals = offset_signals / np.array([1,1,1, dimensions[0], dimensions[1], dimensions[2]])
-    return offset_signals
+    offset_signals_scaled = offset_signals / np.array([1,1,1, dimensions[0], dimensions[1], dimensions[2]])
+    return offset_signals_scaled, offset_signals
 
 def affine_transformation(volume, movement_offsets, upscalefactor=1, printtimes=False):
     
@@ -478,7 +511,7 @@ def simulation_pipeline(n_subs, add_noise_bool, add_trend_bool, add_motion_bool,
 
     # Define fMRI parameters
     TR = 2
-    SNR = 5
+    SNR = 0
     noise_level = 4
     n_tissues = 4 # air, white matter, grey matter, csf
 
@@ -488,7 +521,7 @@ def simulation_pipeline(n_subs, add_noise_bool, add_trend_bool, add_motion_bool,
     
     # Load task data
     data_path = 'data/models/Domains/group_us_conv_'
-    task = np.loadtxt(data_path + 'agent_objective.csv', delimiter=',', skiprows=1)[:, 1]
+    task = np.loadtxt(data_path + 'agent_objective.csv', delimiter=',', skiprows=1)[:, 1:]
     task = np.atleast_2d(task.T).T
 
     # Define task parameters
@@ -516,8 +549,8 @@ def simulation_pipeline(n_subs, add_noise_bool, add_trend_bool, add_motion_bool,
         voxel_dims_mm = tuple(data_nii.header._structarr['pixdim'][1:4])
         x,y,slices,_ = data_nii.shape
 
-        data_avg = np.mean(data_nii.get_fdata(), axis=3) # problema se carichiamo solo un volume!!
-        data_std = np.std(data_nii.get_fdata(), axis=3, ddof=1)
+        data_avg = np.mean(data_nii.get_fdata()[:,:,:,:10], axis=3) # estrarre 10 tpoints
+        data_std = np.std(data_nii.get_fdata()[:,:,:,:10], axis=3, ddof=1)
 
         print('Sub {}. Done with: loading data, defining parameters. It took:  {}  seconds'.format(sub+1, time.time() - tstart))
 
@@ -525,15 +558,19 @@ def simulation_pipeline(n_subs, add_noise_bool, add_trend_bool, add_motion_bool,
         task_downsampled_byslice = downsample_timeshift(task, slices, task_time_res, TR)
         print('Sub {}. Done with: downsampling and adding timeshift. It took:  {}  seconds'.format(sub+1, time.time() - tstart))
 
-        # Create fMRI signal starting from task and seminate only in mask
-        data_signal = seminate_mask(task_downsampled_byslice, semination_mask, SNR, seed_schema[sub,-1])
-        print('Sub {}. Done with: creating fMRI signal from task. It took:  {}  seconds'.format(sub+1, time.time() - tstart))
-
+        
         # Generate and add noise in all voxels
+        data_init = np.zeros((x, y, slices, task_downsampled_byslice.shape[1]))       
         if add_noise_bool:
             filename_prefix += '_noise'
-            data_signal = add_noise(data_signal, noise_level, TR, seed_schema[sub,-2], save='sub{}/noise/noise_{}'.format(sub+1, filename_suffix), check_autocorr=False) #save=filename_suffix
+            data_init = add_noise(data_init, noise_level, TR, seed_schema[sub,-2], save='sub{}/noise/noise_{}'.format(sub+1, filename_suffix), check_autocorr=False) #save=filename_suffix
         print('Sub {}. Done with: generating and adding noise. It took:  {}  seconds'.format(sub+1, time.time() - tstart))
+
+        # Create fMRI signal starting from task and seminate only in mask
+        data_signal = seminate_mask(task_downsampled_byslice, semination_mask, data_init, SNR, seed_schema[sub,-1])
+        print('Sub {}. Done with: creating fMRI signal from task. It took:  {}  seconds'.format(sub+1, time.time() - tstart))
+
+        #
 
         # Segment
         tissues_mask = segment(fmri_data, n_tissues, use_threshold=False, plot=False, save='sub{}/mask/mask_{}'.format(sub+1, filename_suffix)) #save=None
@@ -553,7 +590,7 @@ def simulation_pipeline(n_subs, add_noise_bool, add_trend_bool, add_motion_bool,
             # Generate Trend (for each run separately)
             if add_trend_bool:
                 filename_prefixr += '_trend' 
-                data_run = add_trend(data_run, fmri_data, tissues_mask, seed=seed_schema[sub,r], save='sub{}/trend/polycoeffs{}'.format(sub+1, filename_suffixr)) # save=None
+                data_run = add_trend(data_run, fmri_data, tissues_mask, n_bins=10, seed=seed_schema[sub,r], save='sub{}/trend/polycoeffs{}'.format(sub+1, filename_suffixr)) # save=None
             print('Sub {}. Done with: generating trend for run {}. It took:  {}  seconds'.format(sub+1, r+1, time.time() - tstart))
                 
             # Zscore
@@ -595,7 +632,18 @@ if __name__ == '__main__':
     
     # Saving options
     save = True
-    filename_suffix = 'debug_singlecol'
+    filename_suffix = 'provaloop'
     
     # Call Pipeline
     simulation_pipeline(n_subs, add_noise_bool, add_trend_bool, add_motion_bool, save, filename_suffix)
+
+
+
+    # aggiungere parametro scala trend x
+    # abs beta x
+    # caricare minimo 10 volumi e fare mean e std su quelli x
+    # salvare movreg non scalati X
+
+    # giocare con SNR e vedere effetto su correlazione
+    # loop per eliminare SNR e impostare R voluto
+    # variazione trend
