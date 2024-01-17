@@ -36,7 +36,7 @@ def downsample_timeshift(task, n_slices, task_time_res=0.05, TR=2):
     
     return task_downsampled_byslice
 
-def seminate_mask(task, ROI_mask, data_noise, SNR=5, seed=0):
+def seminate_mask(task, ROI_mask, data_noise, r=0.3, seed=0):
     
     """
     Create fMRI signal based on task regressors and assign it to ROI
@@ -45,49 +45,118 @@ def seminate_mask(task, ROI_mask, data_noise, SNR=5, seed=0):
     - task : array, 3d matrix of shape = n_timepoints (in TR resolution) by slices by n_task_regressor(s)
     - ROI_mask : array, 3d matrix of booleans of shape = x by y by z indicating voxel within ROI
     - data_noise : 
+    - r : 
     - SNR : int or float, indicates signal to noise ratio; default = 5
     - seed : int, seed for random generation of betas; default = 0
 
     Outputs:
     - data_signal : array, 4d matrix of shape = x by y by z by time containing task-related signal only in voxels within mask
     """
+    
+    
+    # Get mask indices
+    (x_inds, y_inds, z_inds) = np.where(ROI_mask == 1)
+    
+    SNR = 0
+    rmax = 0
+    step = 0.01
 
+    
     # Set seed
     np.random.seed(seed)
     
     # Create signal by multiply task data by random betas
     betas = np.abs(np.random.randn(task.shape[2]))
     signal = np.dot(task, betas)
+        
+    if r > 0.99:
+        #print('your R is too large, considered R=0.99')
+        r = 0.99
     
-    # Get mask indices
-    (x_inds, y_inds, z_inds) = np.where(ROI_mask == 1)
-    (x_inds_n, y_inds_n, z_inds_n) = np.where(ROI_mask != 1)
-
-    # Add noise (scaled by SNR factor) and assign signal to each voxel within mask
-    noise = np.random.randn(x_inds.shape[0]) * SNR!=0 + SNR
-    data_noise[x_inds, y_inds, z_inds, :] += (signal[z_inds].T*noise).T
-
-    # Check correlation
-    rlist = np.empty(0)
-    for c in range(task.shape[2]):
+    while rmax < r:
+        
+        rlist = np.zeros(1)     
+        
+        # Check correlation
         for slice in np.unique(z_inds):
+
             x_inds2 = x_inds[np.where(z_inds == slice)]
             y_inds2 = y_inds[np.where(z_inds == slice)]
-            z_inds2 = z_inds[np.where(z_inds == slice)]
+            z_inds2 = z_inds[np.where(z_inds == slice)] 
             
-            sig2corr = data_noise[x_inds2, y_inds2, z_inds2, :]
+            # Set seed
+            np.random.seed(seed+1)
+            
+            # Add noise (scaled by SNR factor) and assign signal to each voxel within mask
+            if SNR > 0:
+                noise = (np.random.randn(x_inds2.shape[0]) * SNR/10) + SNR
+            else:
+                noise = 0          
+            
+            sig2corr = data_noise[x_inds2, y_inds2, z_inds2, :] + (np.expand_dims(signal[slice], 1)*noise).T
 
-            rlist = np.concatenate((rlist, np.corrcoef(task[slice,:, c], sig2corr)[0][1:]))
+            rlist = np.concatenate((rlist, np.corrcoef(signal[slice], sig2corr)[0][1:]))
         
+        rmax = np.max(rlist)
+        #print("SNR={}     r max={}".format(SNR, rmax))
+        SNR += step
+
+    SNR -= step
+
+    step = 0.001
+    
+    if SNR!=0:
+        while rmax >= r:
+            SNR -= step
+            rmax_old = rmax 
+
+            if SNR <= 0:
+                SNR += step
+                step = step/10
+
+            if step <= 10**(-100):
+                break
+
+            rlist = np.zeros(1)
+            
+            # Check correlation
+            for slice in np.unique(z_inds):
+                x_inds2 = x_inds[np.where(z_inds == slice)]
+                y_inds2 = y_inds[np.where(z_inds == slice)]
+                z_inds2 = z_inds[np.where(z_inds == slice)]
+
+                # Set seed
+                np.random.seed(seed+1)
+
+                # Add noise (scaled by SNR factor) and assign signal to each voxel within mask
+                if SNR > 0:
+                    noise = (np.random.randn(x_inds2.shape[0]) * SNR/10) + SNR
+                else:
+                    noise = 0
+                
+                sig2corr = data_noise[x_inds2, y_inds2, z_inds2, :] + (np.expand_dims(signal[slice], 1)*noise).T
+
+                rlist = np.concatenate((rlist, np.corrcoef(signal[slice], sig2corr)[0][1:]))
+            
+            rmax = np.max(rlist)
+            print("SNR={}     r max={}".format(SNR, rmax))
         
-        rnlist = np.concatenate((rnlist, np.corrcoef(task[0, :, c], data_noise[x_inds_n[:20], y_inds_n[:20], z_inds_n[:20], :])[0][1:]))
+        if np.abs(rmax - r) > np.abs(rmax_old - r):
+            SNR += step
+            np.random.seed(seed+1)
+            
+            noise = (np.random.randn(x_inds.shape[0]) * SNR/10) + SNR
+                    
+            data_noise[x_inds, y_inds, z_inds, :] += (signal[z_inds].T*noise).T
 
-    r = np.max(rlist)
+            rmax=rmax_old
 
-
-
-
-    return data_noise
+        else:
+            np.random.seed(seed+1)
+            noise = (np.random.randn(x_inds.shape[0]) * SNR/10) + SNR
+            data_noise[x_inds, y_inds, z_inds, :] += (signal[z_inds].T*noise).T
+        
+    return data_noise, SNR, rmax
 
 def add_noise(data_signal, noise_level=4, TR=2, seed=0, save=None, check_autocorr=False):
     
@@ -507,11 +576,11 @@ def simulation_pipeline(n_subs, add_noise_bool, add_trend_bool, add_motion_bool,
     # Print output to txt file
     orig_stdout = sys.stdout
     logfile = open('data/simulazione_results/logs/out{}.txt'.format(filename_suffix), 'w')
-    sys.stdout = logfile
+    #sys.stdout = logfile
 
     # Define fMRI parameters
     TR = 2
-    SNR = 0
+    R = 1
     noise_level = 4
     n_tissues = 4 # air, white matter, grey matter, csf
 
@@ -567,7 +636,7 @@ def simulation_pipeline(n_subs, add_noise_bool, add_trend_bool, add_motion_bool,
         print('Sub {}. Done with: generating and adding noise. It took:  {}  seconds'.format(sub+1, time.time() - tstart))
 
         # Create fMRI signal starting from task and seminate only in mask
-        data_signal = seminate_mask(task_downsampled_byslice, semination_mask, data_init, SNR, seed_schema[sub,-1])
+        data_signal, SNR, rmax = seminate_mask(task_downsampled_byslice, semination_mask, data_init, R, seed_schema[sub,-1])
         print('Sub {}. Done with: creating fMRI signal from task. It took:  {}  seconds'.format(sub+1, time.time() - tstart))
 
         #
@@ -617,7 +686,7 @@ def simulation_pipeline(n_subs, add_noise_bool, add_trend_bool, add_motion_bool,
     print('Done with: all {} subjects. It took:  {}  seconds'.format(n_subs, time.time() - tstart))
     
     # Close logfile
-    sys.stdout = orig_stdout
+    #sys.stdout = orig_stdout
     logfile.close()
 
     print('finished')
