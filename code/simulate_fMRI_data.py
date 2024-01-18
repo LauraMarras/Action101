@@ -161,7 +161,9 @@ def seminate_mask(task, ROI_mask, data_noise, r=0.3, step=(0.01, 0.001), seed=0)
             SNR_corr = SNR_prev
             rmax = rmax_prev
 
-    return signal_noise, SNR_corr, rmax
+    data_noise[x_inds, y_inds, z_inds, :] = signal_noise
+
+    return data_noise, SNR_corr, rmax
 
 def add_noise(data_signal, noise_level=4, TR=2, seed=0, save=None, check_autocorr=False):
     
@@ -642,7 +644,7 @@ def simulation_pipeline(n_subs, add_noise_bool, add_trend_bool, add_motion_bool,
 
         # Create fMRI signal starting from task and seminate only in mask
         data_signal, SNR, rmax = seminate_mask(task_downsampled_byslice, semination_mask, data_init, R[sub], seed=seed_schema[sub,-1])
-        print('Sub {}. Creating fMRI signal from task. Used SNR = {} to reach maximum R = {}'.format(SNR, rmax))
+        print('Sub {}. Creating fMRI signal from task. Used SNR = {} to reach maximum R = {}'.format(sub+1, SNR, rmax))
         print('Sub {}. Done with: creating fMRI signal from task. It took:  {}  seconds'.format(sub+1, time.time() - tstart))
 
         # Segment
