@@ -6,7 +6,6 @@ from matplotlib import pyplot as plt
 from nilearn import image
 from scipy.stats import zscore, norm
 from scipy.ndimage import zoom, affine_transform
-from scipy.signal import correlate
 from skimage import transform
 from sklearn.mixture import GaussianMixture
 
@@ -36,127 +35,133 @@ def downsample_timeshift(task, n_slices, task_time_res=0.05, TR=2):
     
     return task_downsampled_byslice
 
-def seminate_mask(task, ROI_mask, data_noise, r=0.3, seed=0):
+def compute_correlation(SNR, data_noise, signal, x_inds, y_inds, z_inds, seed=0):
     
     """
-    Create fMRI signal based on task regressors and assign it to ROI
+    Compute correlation coefficient between task signal and signal scaled by SNR with added noise
+
+    Inputs:
+    - SNR : float, signal scaler
+    - data_noise : array, 4d matrix of shape = x by y by slices containing HRF-convoluted rnadom noise
+    - signal : array, 2d matrix of shape = slices by timepoints
+    - x_inds : array, 1d array containing x coordinates of voxels within ROI mask
+    - y_inds : array, 1d array containing y coordinates of voxels within ROI mask
+    - z_inds : array, 1d array containing z coordinates of voxels within ROI mask
+    - seed : int, seed for random generation of betas; default = 0
+
+    Outputs:
+    - rmax : float, maximum correlation coefficient between task signal and signal scaled by SNR with added noise, across voxels within ROI mask
+    - SNR : float, SNR value used to scale the signal
+    - signal_noise : array, 4d matrix of shape = x by y by z by time containing task-related signal + noise in voxels within mask, else noise
+    """
+
+    # Set seed
+    np.random.seed(seed+1)
+    
+    # Initialize array of Rs (one for each slice)
+    rlist = np.array([])
+    
+    # Create SNR array (pick random one for each voxel within slice)
+    signal_scale = (np.random.randn(x_inds.shape[0]) * SNR/10) + SNR                    
+    
+    # Scale signal by SNR and assign signal to each voxel within mask (add to noise)
+    signal_noise = data_noise[x_inds, y_inds, z_inds, :] + (signal[z_inds].T*signal_scale).T
+
+    # Iterate over slices within ROI_mask
+    for slice in np.unique(z_inds):
+
+        # Compute correlation between scaled and noisy signal and original clean signal
+        r = np.corrcoef(signal[slice], signal_noise[np.where(z_inds == slice)])[0][1:]
+        rlist = np.append(rlist, r)
+
+    # Compute R max across slices
+    rmax = np.max(rlist)
+
+    return rmax, SNR, signal_noise
+
+def seminate_mask(task, ROI_mask, data_noise, r=0.3, step=(0.01, 0.001), seed=0):
+    
+    """
+    Create fMRI signal based task regressors and desired R correlation coefficient, and assign it to voxels within ROI
 
     Inputs:
     - task : array, 3d matrix of shape = n_timepoints (in TR resolution) by slices by n_task_regressor(s)
     - ROI_mask : array, 3d matrix of booleans of shape = x by y by z indicating voxel within ROI
-    - data_noise : 
-    - r : 
-    - SNR : int or float, indicates signal to noise ratio; default = 5
+    - data_noise : array, 4d matrix of shape = x by y by slices containing HRF-convoluted rnadom noise
+    - r : float, desired maximum correlation coefficient between task signal and signal scaled by SNR with added noise; default = 0.3
+    - step : tuple, tuple of len = 2, indicating gridsearch intervals; default = (0.01, 0.001)
     - seed : int, seed for random generation of betas; default = 0
 
     Outputs:
-    - data_signal : array, 4d matrix of shape = x by y by z by time containing task-related signal only in voxels within mask
+    - signal_noise : array, 4d matrix of shape = x by y by z by time containing task-related signal only in voxels within mask
+    - SNR_corr : float, final SNR value used to scale the signal
+    - rmax : float, final correlation coefficient obtained
+
+    Calls:
+    - compute_correlation()
     """
-    
     
     # Get mask indices
     (x_inds, y_inds, z_inds) = np.where(ROI_mask == 1)
     
     SNR = 0
     rmax = 0
-    step = 0.01
+    step_1 = step[0]
+    step_2 = step[1]
 
-    
     # Set seed
     np.random.seed(seed)
     
     # Create signal by multiply task data by random betas
     betas = np.abs(np.random.randn(task.shape[2]))
     signal = np.dot(task, betas)
-        
-    if r > 0.99:
-        #print('your R is too large, considered R=0.99')
-        r = 0.99
+
+    # Verify that desired R falls within reasonable range     
+    if r < 0:
+        print('The desired R is < 0, considered |R|')
     
-    while rmax < r:
-        
-        rlist = np.zeros(1)     
-        
-        # Check correlation
-        for slice in np.unique(z_inds):
+    if r >= 1:
+        print('The desired R is >= 1, considered R = 0.9999')
+        r = np.sign(r) * 0.9999
 
-            x_inds2 = x_inds[np.where(z_inds == slice)]
-            y_inds2 = y_inds[np.where(z_inds == slice)]
-            z_inds2 = z_inds[np.where(z_inds == slice)] 
+    # Start from SNR = 0, increase SNR by step until the obtained R is larger or equal to |desired R|
+    while rmax < np.abs(r):
+        rmax, SNR_corr, signal_noise = compute_correlation(SNR, data_noise, signal, x_inds, y_inds, z_inds, seed=seed+1)
+        SNR += step_1
+
+    # Verify that the |desired R| isn't lower than the one obtained by chance (correlating task signal with random noise)
+    if SNR_corr == 0:
+        print('The |desired R| is lower than the R obtained by correlating task signal with random noise, considered SNR = 0')           
+
+    else:
+        # Starting from last value of SNR, decrease SNR by step until the obtained R is lower or equal to |desired R|
+        while rmax > np.abs(r):
             
-            # Set seed
-            np.random.seed(seed+1)
+            # Save results from previous iteration
+            signal_noise_prev = signal_noise
+            SNR_prev = SNR_corr
+            rmax_prev = rmax
             
-            # Add noise (scaled by SNR factor) and assign signal to each voxel within mask
-            if SNR > 0:
-                noise = (np.random.randn(x_inds2.shape[0]) * SNR/10) + SNR
-            else:
-                noise = 0          
+            SNR = SNR_corr - step_2
             
-            sig2corr = data_noise[x_inds2, y_inds2, z_inds2, :] + (np.expand_dims(signal[slice], 1)*noise).T
-
-            rlist = np.concatenate((rlist, np.corrcoef(signal[slice], sig2corr)[0][1:]))
-        
-        rmax = np.max(rlist)
-        #print("SNR={}     r max={}".format(SNR, rmax))
-        SNR += step
-
-    SNR -= step
-
-    step = 0.001
-    
-    if SNR!=0:
-        while rmax >= r:
-            SNR -= step
-            rmax_old = rmax 
-
+            # Check that you don't use negative SNR (in case you are really close to SNR = 0), in case, go to previous value of SNR (positive), reduce your step by 1/10
             if SNR <= 0:
-                SNR += step
-                step = step/10
+                SNR += step_2
+                step_2 = step_2/10
+                SNR -= step_2
 
-            if step <= 10**(-100):
+            # Stop when your step is too small (10^-5), you are either really close to SNR==0 or to |desired R|
+            if step_2 <= 10**(-5):
                 break
-
-            rlist = np.zeros(1)
             
-            # Check correlation
-            for slice in np.unique(z_inds):
-                x_inds2 = x_inds[np.where(z_inds == slice)]
-                y_inds2 = y_inds[np.where(z_inds == slice)]
-                z_inds2 = z_inds[np.where(z_inds == slice)]
+            rmax, SNR_corr, signal_noise = compute_correlation(SNR, data_noise, signal, x_inds, y_inds, z_inds, seed=seed+1)
+    
+        if np.abs(rmax - np.abs(r)) > np.abs(rmax_prev - np.abs(r)):
+            signal_noise = signal_noise_prev
+            SNR_corr = SNR_prev
+            rmax = rmax_prev
 
-                # Set seed
-                np.random.seed(seed+1)
-
-                # Add noise (scaled by SNR factor) and assign signal to each voxel within mask
-                if SNR > 0:
-                    noise = (np.random.randn(x_inds2.shape[0]) * SNR/10) + SNR
-                else:
-                    noise = 0
-                
-                sig2corr = data_noise[x_inds2, y_inds2, z_inds2, :] + (np.expand_dims(signal[slice], 1)*noise).T
-
-                rlist = np.concatenate((rlist, np.corrcoef(signal[slice], sig2corr)[0][1:]))
-            
-            rmax = np.max(rlist)
-            print("SNR={}     r max={}".format(SNR, rmax))
-        
-        if np.abs(rmax - r) > np.abs(rmax_old - r):
-            SNR += step
-            np.random.seed(seed+1)
-            
-            noise = (np.random.randn(x_inds.shape[0]) * SNR/10) + SNR
-                    
-            data_noise[x_inds, y_inds, z_inds, :] += (signal[z_inds].T*noise).T
-
-            rmax=rmax_old
-
-        else:
-            np.random.seed(seed+1)
-            noise = (np.random.randn(x_inds.shape[0]) * SNR/10) + SNR
-            data_noise[x_inds, y_inds, z_inds, :] += (signal[z_inds].T*noise).T
-        
-    return data_noise, SNR, rmax
+    return signal_noise, SNR_corr, rmax
 
 def add_noise(data_signal, noise_level=4, TR=2, seed=0, save=None, check_autocorr=False):
     
@@ -164,7 +169,7 @@ def add_noise(data_signal, noise_level=4, TR=2, seed=0, save=None, check_autocor
     Add noise to fMRI data matrix
 
     Inputs:
-    - data_signal : array, 4d matrix of shape = x by y by z by time containing task-related signal only in voxels within mask, else zeros
+    - data_signal : array, 4d matrix of shape = x by y by z by time containing task-related signal only in voxels within mask, else zeros or containing only zeros
     - noise_level : int or float, indicates scale of gaussian noise; default = 4
     - TR : int or float, fMRI resolution, in seconds; default = 2
     - seed : int, seed for random generation of gaussian noise; default = 0
@@ -266,7 +271,6 @@ def autocorr_diff(data_noise, data_noise_conv, coords=(0,0,0)):
     
     plt.suptitle('Autocorrelation of random voxel')
     plt.savefig('trash/autocorrelation_{}.png'.format(str(coords)))
-
 
 def segment(volume, n_tissues=4, use_threshold=False, plot=False, save=None):
     
@@ -576,13 +580,15 @@ def simulation_pipeline(n_subs, add_noise_bool, add_trend_bool, add_motion_bool,
     # Print output to txt file
     orig_stdout = sys.stdout
     logfile = open('data/simulazione_results/logs/out{}.txt'.format(filename_suffix), 'w')
-    #sys.stdout = logfile
+    sys.stdout = logfile
 
     # Define fMRI parameters
     TR = 2
-    R = 1
+    np.random.seed(0)
+    R = np.random.uniform(0, 1, n_subs)
     noise_level = 4
     n_tissues = 4 # air, white matter, grey matter, csf
+    n_bins_trend = 80
 
     # Movement parameters
     movement_upscale = 1
@@ -627,19 +633,17 @@ def simulation_pipeline(n_subs, add_noise_bool, add_trend_bool, add_motion_bool,
         task_downsampled_byslice = downsample_timeshift(task, slices, task_time_res, TR)
         print('Sub {}. Done with: downsampling and adding timeshift. It took:  {}  seconds'.format(sub+1, time.time() - tstart))
 
-        
         # Generate and add noise in all voxels
         data_init = np.zeros((x, y, slices, task_downsampled_byslice.shape[1]))       
         if add_noise_bool:
             filename_prefix += '_noise'
             data_init = add_noise(data_init, noise_level, TR, seed_schema[sub,-2], save='sub{}/noise/noise_{}'.format(sub+1, filename_suffix), check_autocorr=False) #save=filename_suffix
-        print('Sub {}. Done with: generating and adding noise. It took:  {}  seconds'.format(sub+1, time.time() - tstart))
+        print('Sub {}. Done with: generating random noise. It took:  {}  seconds'.format(sub+1, time.time() - tstart))
 
         # Create fMRI signal starting from task and seminate only in mask
-        data_signal, SNR, rmax = seminate_mask(task_downsampled_byslice, semination_mask, data_init, R, seed_schema[sub,-1])
+        data_signal, SNR, rmax = seminate_mask(task_downsampled_byslice, semination_mask, data_init, R[sub], seed=seed_schema[sub,-1])
+        print('Sub {}. Creating fMRI signal from task. Used SNR = {} to reach maximum R = {}'.format(SNR, rmax))
         print('Sub {}. Done with: creating fMRI signal from task. It took:  {}  seconds'.format(sub+1, time.time() - tstart))
-
-        #
 
         # Segment
         tissues_mask = segment(fmri_data, n_tissues, use_threshold=False, plot=False, save='sub{}/mask/mask_{}'.format(sub+1, filename_suffix)) #save=None
@@ -659,7 +663,7 @@ def simulation_pipeline(n_subs, add_noise_bool, add_trend_bool, add_motion_bool,
             # Generate Trend (for each run separately)
             if add_trend_bool:
                 filename_prefixr += '_trend' 
-                data_run = add_trend(data_run, fmri_data, tissues_mask, n_bins=10, seed=seed_schema[sub,r], save='sub{}/trend/polycoeffs{}'.format(sub+1, filename_suffixr)) # save=None
+                data_run = add_trend(data_run, fmri_data, tissues_mask, n_bins=n_bins_trend, seed=seed_schema[sub,r], save='sub{}/trend/polycoeffs{}'.format(sub+1, filename_suffixr)) # save=None
             print('Sub {}. Done with: generating trend for run {}. It took:  {}  seconds'.format(sub+1, r+1, time.time() - tstart))
                 
             # Zscore
@@ -686,7 +690,7 @@ def simulation_pipeline(n_subs, add_noise_bool, add_trend_bool, add_motion_bool,
     print('Done with: all {} subjects. It took:  {}  seconds'.format(n_subs, time.time() - tstart))
     
     # Close logfile
-    #sys.stdout = orig_stdout
+    sys.stdout = orig_stdout
     logfile.close()
 
     print('finished')
@@ -701,18 +705,7 @@ if __name__ == '__main__':
     
     # Saving options
     save = True
-    filename_suffix = 'provaloop'
+    filename_suffix = 'last'
     
     # Call Pipeline
     simulation_pipeline(n_subs, add_noise_bool, add_trend_bool, add_motion_bool, save, filename_suffix)
-
-
-
-    # aggiungere parametro scala trend x
-    # abs beta x
-    # caricare minimo 10 volumi e fare mean e std su quelli x
-    # salvare movreg non scalati X
-
-    # giocare con SNR e vedere effetto su correlazione
-    # loop per eliminare SNR e impostare R voluto
-    # variazione trend
