@@ -598,7 +598,7 @@ def simulation_pipeline(n_subs, add_noise_bool, add_trend_bool, add_motion_bool,
     
     # Load task data
     data_path = 'data/models/Domains/group_us_conv_'
-    task = np.loadtxt(data_path + 'agent_objective.csv', delimiter=',', skiprows=1)[:, 1:]
+    task = np.loadtxt(data_path + 'agent_objective.csv', delimiter=',', skiprows=1)[:, 1]
     task = np.atleast_2d(task.T).T
 
     # Define task parameters
@@ -707,7 +707,7 @@ if __name__ == '__main__':
     
     # Saving options
     save = True
-    filename_suffix = 'last'
+    filename_suffix = 'last_singlecol'
     
     # Call Pipeline
     simulation_pipeline(n_subs, add_noise_bool, add_trend_bool, add_motion_bool, save, filename_suffix)
