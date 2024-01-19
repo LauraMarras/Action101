@@ -9,36 +9,59 @@ from canon_corr_fmri import permutation_schema, run_canoncorr, gen_fmri_signal, 
 import numpy as np
 import time
 import multiprocessing as mp
+from nilearn import image
+
+def extract_roi(data, atlas):
+        
+    rois = np.unique(atlas)
+    rois = np.delete(rois, np.argwhere(rois==0))
+    n_rois = len(rois)
+
+    data_rois = {}
+
+    for roi in rois[:5]:
+        (x,y,z) = np.where(atlas==roi)
+        data_roi = data[x,y,z,:]
+        data_rois[int(roi)] = data_roi.T
+   
+
+    return data_rois, n_rois
+
+
 
 if __name__ == '__main__':
 
     t = time.time()
 
     # Set parameters
-    n_rois = 30 #400
-    n_voxels = 100
-    n_perms = 500 #1000
+    sub=0
+    #n_rois = 30 #400
+    #n_voxels = 100
+    n_perms = 2 #1000
     n_tpoints = 1614
     chunk_size = 15 # add check max action duration
     seed = 0
 
     
-    # Set data_path as the path where the csv files containing single domain matrices are saved, including first part of filename, up to the domain specification (here I specify 'tagging_carica101_group_2su3_convolved_' for example)
-    data_path = 'Data/Carica101_Models/Domains/tagging_carica101_group_2su3_convolved_'
+    # Set model_path as the path where the csv files containing single domain matrices are saved, including first part of filename, up to the domain specification (here I specify 'tagging_carica101_group_2su3_convolved_' for example)
+    model_path = 'data/models/Domains/group_ds_conv_'
 
     # Set out_path as the path where to save results figures
     out_path = 'Results/Collinearity/New/'
 
     # Load Models
     domains_list = ['space_movement', 'agent_objective', 'social_connectivity', 'emotion_expression', 'linguistic_predictiveness']
-    domains = {d: np.loadtxt(data_path + '{}.csv'.format(d), delimiter=',', skiprows=1)[:, 1:] for d in domains_list}
+    domains = {d: np.loadtxt(model_path + '{}.csv'.format(d), delimiter=',', skiprows=1)[:, 1:] for d in domains_list}
 
-    # Generate fake correlated data starting from domain
-    data = {r: gen_correlated_data(domains['space_movement'], n_voxels, noise=2) for r in range(n_rois)}
+    # Load Data
+    data = image.load_img('data/simulazione_results/sub-0{}/func/cleaned.nii.gz'.format(sub+1)).get_fdata()
+    atlas = image.load_img('data/simulazione_datasets/sub-0{}/atlas_2orig.nii.gz'.format(sub+1)).get_fdata()
 
-    # Generate fake simulated data (simple oscillations)
-    #data = {r: gen_fmri_signal() for r in range(n_rois)}
-    
+    # Extract rois
+    data_rois, n_rois = extract_roi(data, atlas)
+
+    n_tpoints = data.shape[-1]
+
     # Generate permutation schema
     perm_schema = permutation_schema(n_tpoints, n_perms=n_perms, chunk_size=chunk_size)
 
@@ -49,9 +72,9 @@ if __name__ == '__main__':
     t1 = time.time()
     results_pool = []
 
-    pool = mp.Pool(15)
+    pool = mp.Pool(5)
 
-    for r, roi in data.items():
+    for r, roi in data_rois.items():
         result_pool = pool.apply_async(run_canoncorr, args=(roi, perm_schema, domains, True))
         results_pool.append(result_pool)
     
