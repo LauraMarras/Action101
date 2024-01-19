@@ -588,6 +588,7 @@ def simulation_pipeline(n_subs, add_noise_bool, add_trend_bool, add_motion_bool,
     TR = 2
     np.random.seed(0)
     R = np.random.uniform(0, 1, n_subs)
+    R[0] = 0.35
     noise_level = 4
     n_tissues = 4 # air, white matter, grey matter, csf
     n_bins_trend = 80
@@ -598,7 +599,7 @@ def simulation_pipeline(n_subs, add_noise_bool, add_trend_bool, add_motion_bool,
     
     # Load task data
     data_path = 'data/models/Domains/group_us_conv_'
-    task = np.loadtxt(data_path + 'agent_objective.csv', delimiter=',', skiprows=1)[:, 1]
+    task = np.loadtxt(data_path + 'agent_objective.csv', delimiter=',', skiprows=1)[:, 1:]
     task = np.atleast_2d(task.T).T
 
     # Define task parameters
@@ -617,7 +618,7 @@ def simulation_pipeline(n_subs, add_noise_bool, add_trend_bool, add_motion_bool,
         # Load fMRI data and Mask (voxels where to seminate task signal)
         global data_nii
         data_nii = image.load_img('data/simulazione_datasets/sub{}/run1_template.nii'.format(sub+1))
-        mask_nii = image.load_img('data/simulazione_datasets/sub{}/atlas_2orig.nii'.format(sub+1))
+        mask_nii = image.load_img('data/simulazione_datasets/sub{}/mask_2orig.nii'.format(sub+1))
 
         fmri_data = data_nii.get_fdata()[:,:,:,0] # Get single volume
         semination_mask = mask_nii.get_fdata()
@@ -707,7 +708,7 @@ if __name__ == '__main__':
     
     # Saving options
     save = True
-    filename_suffix = 'last_singlecol'
+    filename_suffix = 'last2'
     
     # Call Pipeline
     simulation_pipeline(n_subs, add_noise_bool, add_trend_bool, add_motion_bool, save, filename_suffix)
