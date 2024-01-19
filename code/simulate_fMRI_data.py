@@ -163,7 +163,7 @@ def seminate_mask(task, ROI_mask, data_noise, r=0.3, step=(0.01, 0.001), seed=0)
 
     data_noise[x_inds, y_inds, z_inds, :] = signal_noise
 
-    return data_noise, SNR_corr, rmax
+    return data_noise, SNR_corr, rmax, 
 
 def add_noise(data_signal, noise_level=4, TR=2, seed=0, save=None, check_autocorr=False):
     
@@ -617,8 +617,8 @@ def simulation_pipeline(n_subs, add_noise_bool, add_trend_bool, add_motion_bool,
 
         # Load fMRI data and Mask (voxels where to seminate task signal)
         global data_nii
-        data_nii = image.load_img('data/simulazione_datasets/sub{}/run1_template.nii'.format(sub+1))
-        mask_nii = image.load_img('data/simulazione_datasets/sub{}/mask_2orig.nii'.format(sub+1))
+        data_nii = image.load_img('data/simulazione_datasets/sub-0{}/run1_template.nii'.format(sub+1))
+        mask_nii = image.load_img('data/simulazione_datasets/sub-0{}/mask_2orig.nii'.format(sub+1))
 
         fmri_data = data_nii.get_fdata()[:,:,:,0] # Get single volume
         semination_mask = mask_nii.get_fdata()
@@ -699,16 +699,31 @@ def simulation_pipeline(n_subs, add_noise_bool, add_trend_bool, add_motion_bool,
     print('finished')
 
 if __name__ == '__main__':
+    """ 
+    seed_schema = np.reshape(np.arange(0,((6*2)+2)*9), (9,6*2+2))
+    np.random.seed(seed_schema[0,-1])
+    
+    # Load task data
+    data_path = 'data/models/Domains/group_us_conv_'
+    task = np.loadtxt(data_path + 'agent_objective.csv', delimiter=',', skiprows=1)[:, 1:]
+    task = np.atleast_2d(task.T).T
+
+    # Downsample convolved regressors back to TR resolution and add timeshift for each slice    
+    task_downsampled_byslice = downsample_timeshift(task, 38, 0.05, 2)
+    
+    # Create signal by multiply task data by random betas
+    betas = np.abs(np.random.randn(task_downsampled_byslice.shape[2]))
+    signal = np.dot(task_downsampled_byslice, betas) """
     
     # Define options
     n_subs = 1
-    add_noise_bool = True
+    add_noise_bool = False
     add_trend_bool = True
     add_motion_bool = True
     
     # Saving options
     save = True
-    filename_suffix = 'last2'
+    filename_suffix = 'savesignal'
     
     # Call Pipeline
     simulation_pipeline(n_subs, add_noise_bool, add_trend_bool, add_motion_bool, save, filename_suffix)
