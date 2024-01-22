@@ -79,6 +79,96 @@ def compute_correlation(SNR, data_noise, signal, x_inds, y_inds, z_inds, seed=0)
 
     return rmax, SNR, signal_noise
 
+def seminate_squarewave(ROI_mask, data_noise, r=0.3, step=(0.01, 0.001), seed=0, save=None):
+    
+    """
+    Create fMRI signal based task regressors and desired R correlation coefficient, and assign it to voxels within ROI
+
+    Inputs:
+    - ROI_mask : array, 3d matrix of booleans of shape = x by y by z indicating voxel within ROI
+    - data_noise : array, 4d matrix of shape = x by y by slices containing HRF-convoluted rnadom noise
+    - r : float, desired maximum correlation coefficient between task signal and signal scaled by SNR with added noise; default = 0.3
+    - step : tuple, tuple of len = 2, indicating gridsearch intervals; default = (0.01, 0.001)
+    - seed : int, seed for random generation of betas; default = 0
+    - save : str, path where (whether) to save signal and beta coefficients as 1D files; default = None
+    
+    Outputs:
+    - signal_noise : array, 4d matrix of shape = x by y by z by time containing task-related signal only in voxels within mask
+    - SNR_corr : float, final SNR value used to scale the signal
+    - rmax : float, final correlation coefficient obtained
+
+    Calls:
+    - compute_correlation()
+    """
+    
+    # Get mask indices
+    (x_inds, y_inds, z_inds) = np.where(ROI_mask == 1)
+    
+    SNR = 0
+    rmax = 0
+    step_1 = step[0]
+    step_2 = step[1]
+
+    # Set seed
+    np.random.seed(seed)
+    
+    # Create signal
+    signal = np.zeros((len(z_inds), data_noise.shape[-1]))
+    signal[:, 400:500] = 1
+
+    # Save signal and betas
+    if save:
+        np.savetxt('data/simulazione_results/{}/square_signal.1D'.format(save), signal, delimiter=' ')
+
+    # Verify that desired R falls within reasonable range     
+    if r < 0:
+        print('The desired R is < 0, considered |R|')
+    
+    if r >= 1:
+        print('The desired R is >= 1, considered R = 0.9999')
+        r = np.sign(r) * 0.9999
+
+    # Start from SNR = 0, increase SNR by step until the obtained R is larger or equal to |desired R|
+    while rmax < np.abs(r):
+        rmax, SNR_corr, signal_noise = compute_correlation(SNR, data_noise, signal, x_inds, y_inds, z_inds, seed=seed+1)
+        SNR += step_1
+
+    # Verify that the |desired R| isn't lower than the one obtained by chance (correlating task signal with random noise)
+    if SNR_corr == 0:
+        print('The |desired R| is lower than the R obtained by correlating task signal with random noise, considered SNR = 0')           
+
+    else:
+        # Starting from last value of SNR, decrease SNR by step until the obtained R is lower or equal to |desired R|
+        while rmax > np.abs(r):
+            
+            # Save results from previous iteration
+            signal_noise_prev = signal_noise
+            SNR_prev = SNR_corr
+            rmax_prev = rmax
+            
+            SNR = SNR_corr - step_2
+            
+            # Check that you don't use negative SNR (in case you are really close to SNR = 0), in case, go to previous value of SNR (positive), reduce your step by 1/10
+            if SNR <= 0:
+                SNR += step_2
+                step_2 = step_2/10
+                SNR -= step_2
+
+            # Stop when your step is too small (10^-5), you are either really close to SNR==0 or to |desired R|
+            if step_2 <= 10**(-5):
+                break
+            
+            rmax, SNR_corr, signal_noise = compute_correlation(SNR, data_noise, signal, x_inds, y_inds, z_inds, seed=seed+1)
+    
+        if np.abs(rmax - np.abs(r)) > np.abs(rmax_prev - np.abs(r)):
+            signal_noise = signal_noise_prev
+            SNR_corr = SNR_prev
+            rmax = rmax_prev
+
+    data_noise[x_inds, y_inds, z_inds, :] = signal_noise
+
+    return data_noise, SNR_corr, rmax, 
+
 def seminate_mask(task, ROI_mask, data_noise, r=0.3, step=(0.01, 0.001), seed=0, save=None):
     
     """
@@ -169,7 +259,7 @@ def seminate_mask(task, ROI_mask, data_noise, r=0.3, step=(0.01, 0.001), seed=0,
 
     data_noise[x_inds, y_inds, z_inds, :] = signal_noise
 
-    return data_noise, SNR_corr, rmax, 
+    return data_noise, SNR_corr, rmax
 
 def add_noise(data_signal, noise_level=4, TR=2, seed=0, save=None, check_autocorr=False):
     
@@ -594,7 +684,6 @@ def simulation_pipeline(n_subs, add_noise_bool, add_trend_bool, add_motion_bool,
     TR = 2
     np.random.seed(0)
     R = np.random.uniform(0, 1, n_subs)
-    R[0] = 0.35
     noise_level = 4
     n_tissues = 4 # air, white matter, grey matter, csf
     n_bins_trend = 80
@@ -604,7 +693,7 @@ def simulation_pipeline(n_subs, add_noise_bool, add_trend_bool, add_motion_bool,
     regressors_path = 'data/simulazione_datasets/motionreg/'
     
     # Load task data
-    data_path = 'data/models/Domains/group_us_conv_'
+    data_path = 'data/models/domains/group_us_conv_'
     task = np.loadtxt(data_path + 'agent_objective.csv', delimiter=',', skiprows=1)[:, 1:]
     task = np.atleast_2d(task.T).T
 
@@ -624,7 +713,7 @@ def simulation_pipeline(n_subs, add_noise_bool, add_trend_bool, add_motion_bool,
         # Load fMRI data and Mask (voxels where to seminate task signal)
         global data_nii
         data_nii = image.load_img('data/simulazione_datasets/sub-0{}/run1_template.nii'.format(sub+1))
-        mask_nii = image.load_img('data/simulazione_datasets/sub-0{}/mask_2orig.nii'.format(sub+1))
+        mask_nii = image.load_img('data/simulazione_datasets/sub-0{}/mask_2orig.nii.gz'.format(sub+1))
 
         fmri_data = data_nii.get_fdata()[:,:,:,0] # Get single volume
         semination_mask = mask_nii.get_fdata()
@@ -650,7 +739,8 @@ def simulation_pipeline(n_subs, add_noise_bool, add_trend_bool, add_motion_bool,
         print('Sub {}. Done with: generating random noise. It took:  {}  seconds'.format(sub+1, time.time() - tstart))
 
         # Create fMRI signal starting from task and seminate only in mask
-        data_signal, SNR, rmax = seminate_mask(task_downsampled_byslice, semination_mask, data_init, R[sub], seed=seed_schema[sub,-1], save='sub{}/semina'.format(sub+1))
+        data_signal, SNR, rmax = seminate_squarewave(semination_mask, data_init, R[sub], seed=seed_schema[sub,-1], save='sub{}/semina'.format(sub+1))
+        #data_signal, SNR, rmax = seminate_mask(task_downsampled_byslice, semination_mask, data_init, R[sub], seed=seed_schema[sub,-1], save='sub{}/semina'.format(sub+1))
         print('Sub {}. Creating fMRI signal from task. Used SNR = {} to reach maximum R = {}'.format(sub+1, SNR, rmax))
         print('Sub {}. Done with: creating fMRI signal from task. It took:  {}  seconds'.format(sub+1, time.time() - tstart))
 
@@ -708,13 +798,13 @@ if __name__ == '__main__':
     
     # Define options
     n_subs = 1
-    add_noise_bool = False
+    add_noise_bool = True
     add_trend_bool = True
     add_motion_bool = True
     
     # Saving options
     save = True
-    filename_suffix = 'savesignal'
+    filename_suffix = 'square_sig'
     
     # Call Pipeline
     simulation_pipeline(n_subs, add_noise_bool, add_trend_bool, add_motion_bool, save, filename_suffix)
