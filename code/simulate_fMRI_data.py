@@ -79,7 +79,7 @@ def compute_correlation(SNR, data_noise, signal, x_inds, y_inds, z_inds, seed=0)
 
     return rmax, SNR, signal_noise
 
-def seminate_mask(task, ROI_mask, data_noise, r=0.3, step=(0.01, 0.001), seed=0):
+def seminate_mask(task, ROI_mask, data_noise, r=0.3, step=(0.01, 0.001), seed=0, save=None):
     
     """
     Create fMRI signal based task regressors and desired R correlation coefficient, and assign it to voxels within ROI
@@ -91,7 +91,8 @@ def seminate_mask(task, ROI_mask, data_noise, r=0.3, step=(0.01, 0.001), seed=0)
     - r : float, desired maximum correlation coefficient between task signal and signal scaled by SNR with added noise; default = 0.3
     - step : tuple, tuple of len = 2, indicating gridsearch intervals; default = (0.01, 0.001)
     - seed : int, seed for random generation of betas; default = 0
-
+    - save : str, path where (whether) to save signal and beta coefficients as 1D files; default = None
+    
     Outputs:
     - signal_noise : array, 4d matrix of shape = x by y by z by time containing task-related signal only in voxels within mask
     - SNR_corr : float, final SNR value used to scale the signal
@@ -115,6 +116,11 @@ def seminate_mask(task, ROI_mask, data_noise, r=0.3, step=(0.01, 0.001), seed=0)
     # Create signal by multiply task data by random betas
     betas = np.abs(np.random.randn(task.shape[2]))
     signal = np.dot(task, betas)
+
+    # Save signal and betas
+    if save:
+        np.savetxt('data/simulazione_results/{}/signal.1D'.format(save), signal, delimiter=' ')
+        np.savetxt('data/simulazione_results/{}/betas.1D'.format(save), betas, delimiter=' ')
 
     # Verify that desired R falls within reasonable range     
     if r < 0:
@@ -644,12 +650,12 @@ def simulation_pipeline(n_subs, add_noise_bool, add_trend_bool, add_motion_bool,
         print('Sub {}. Done with: generating random noise. It took:  {}  seconds'.format(sub+1, time.time() - tstart))
 
         # Create fMRI signal starting from task and seminate only in mask
-        data_signal, SNR, rmax = seminate_mask(task_downsampled_byslice, semination_mask, data_init, R[sub], seed=seed_schema[sub,-1])
+        data_signal, SNR, rmax = seminate_mask(task_downsampled_byslice, semination_mask, data_init, R[sub], seed=seed_schema[sub,-1], save='sub{}/semina'.format(sub+1))
         print('Sub {}. Creating fMRI signal from task. Used SNR = {} to reach maximum R = {}'.format(sub+1, SNR, rmax))
         print('Sub {}. Done with: creating fMRI signal from task. It took:  {}  seconds'.format(sub+1, time.time() - tstart))
 
         # Segment
-        tissues_mask = segment(fmri_data, n_tissues, use_threshold=False, plot=False, save='sub{}/mask/mask_{}'.format(sub+1, filename_suffix)) #save=None
+        tissues_mask = segment(data_avg, n_tissues, use_threshold=False, plot=False, save='sub{}/mask/mask_{}'.format(sub+1, filename_suffix)) #save=None
         print('Sub {}. Done with: segmenting. It took:  {}  seconds'.format(sub+1, time.time() - tstart))
         
         # Iterate over runs
@@ -699,21 +705,6 @@ def simulation_pipeline(n_subs, add_noise_bool, add_trend_bool, add_motion_bool,
     print('finished')
 
 if __name__ == '__main__':
-    """ 
-    seed_schema = np.reshape(np.arange(0,((6*2)+2)*9), (9,6*2+2))
-    np.random.seed(seed_schema[0,-1])
-    
-    # Load task data
-    data_path = 'data/models/Domains/group_us_conv_'
-    task = np.loadtxt(data_path + 'agent_objective.csv', delimiter=',', skiprows=1)[:, 1:]
-    task = np.atleast_2d(task.T).T
-
-    # Downsample convolved regressors back to TR resolution and add timeshift for each slice    
-    task_downsampled_byslice = downsample_timeshift(task, 38, 0.05, 2)
-    
-    # Create signal by multiply task data by random betas
-    betas = np.abs(np.random.randn(task_downsampled_byslice.shape[2]))
-    signal = np.dot(task_downsampled_byslice, betas) """
     
     # Define options
     n_subs = 1
