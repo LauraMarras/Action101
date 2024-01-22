@@ -32,6 +32,9 @@ def extract_roi(data, atlas):
 
 if __name__ == '__main__':
 
+    #res = np.load('data/results/results_sub-02.npy', allow_pickle=True)
+    
+    
     t = time.time()
 
     # Set parameters
@@ -42,7 +45,7 @@ if __name__ == '__main__':
 
     # Print output to txt file
     orig_stdout = sys.stdout
-    logfile = open('data/results/logs_sub-0{}.txt'.format(sub+1), 'w')
+    logfile = open('data/results/logs_sub-0{}_notadj.txt'.format(sub+1), 'w')
     sys.stdout = logfile
     
     # Set model_path as the path where the csv files containing single domain matrices are saved, including first part of filename, up to the domain specification (here I specify 'tagging_carica101_group_2su3_convolved_' for example)
@@ -77,7 +80,7 @@ if __name__ == '__main__':
     pool = mp.Pool(20)
 
     for r, roi in data_rois.items():
-        result_pool = pool.apply_async(run_canoncorr, args=(roi, perm_schema, domains, True))
+        result_pool = pool.apply_async(run_canoncorr, args=(roi, perm_schema, domains, False))
         results_pool.append(result_pool)
     
     pool.close()
@@ -87,7 +90,7 @@ if __name__ == '__main__':
         njob = result_pool._job
         result_matrix[njob, :, :] = result_pool.get()
             
-    np.save('data/results/results_sub-0{}'.format(sub+1), result_matrix)
+    np.save('data/results/results_sub-0{}_notadj'.format(sub+1), result_matrix)
     
     print('time to run cca for each roi, with {} permutations:       '.format(n_perms), (time.time() - t1))
 
