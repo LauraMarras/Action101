@@ -31,10 +31,6 @@ def extract_roi(data, atlas):
 
 
 if __name__ == '__main__':
-
-    #res = np.load('data/results/results_sub-02.npy', allow_pickle=True)
-    
-    
     t = time.time()
 
     # Set parameters
@@ -45,11 +41,11 @@ if __name__ == '__main__':
 
     # Print output to txt file
     orig_stdout = sys.stdout
-    logfile = open('data/results/logs_sub-0{}_notadj.txt'.format(sub+1), 'w')
+    logfile = open('data/results/logs_sub-0{}_suffix.txt'.format(sub+1), 'w')
     sys.stdout = logfile
     
     # Set model_path as the path where the csv files containing single domain matrices are saved, including first part of filename, up to the domain specification (here I specify 'tagging_carica101_group_2su3_convolved_' for example)
-    model_path = 'data/models/Domains/group_ds_conv_'
+    model_path = 'data/models/domains/group_ds_conv_'
 
     # Set out_path as the path where to save results figures
     out_path = 'Results/Collinearity/New/'
