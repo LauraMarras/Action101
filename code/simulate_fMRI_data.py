@@ -86,7 +86,7 @@ def seminate_squarewave(ROI_mask, data_noise, r=0.3, step=(0.01, 0.001), seed=0,
 
     Inputs:
     - ROI_mask : array, 3d matrix of booleans of shape = x by y by z indicating voxel within ROI
-    - data_noise : array, 4d matrix of shape = x by y by slices containing HRF-convoluted rnadom noise
+    - data_noise : array, 4d matrix of shape = x by y by slices containing HRF-convoluted random noise
     - r : float, desired maximum correlation coefficient between task signal and signal scaled by SNR with added noise; default = 0.3
     - step : tuple, tuple of len = 2, indicating gridsearch intervals; default = (0.01, 0.001)
     - seed : int, seed for random generation of betas; default = 0
@@ -113,12 +113,8 @@ def seminate_squarewave(ROI_mask, data_noise, r=0.3, step=(0.01, 0.001), seed=0,
     np.random.seed(seed)
     
     # Create signal
-    signal = np.zeros((len(z_inds), data_noise.shape[-1]))
-    signal[:, 400:500] = 1
-
-    # Save signal and betas
-    if save:
-        np.savetxt('data/simulazione_results/{}/square_signal.1D'.format(save), signal, delimiter=' ')
+    signal = np.ones((data_noise.shape[2], data_noise.shape[-1]))
+    signal[:, 400:500] = 2
 
     # Verify that desired R falls within reasonable range     
     if r < 0:
@@ -166,8 +162,13 @@ def seminate_squarewave(ROI_mask, data_noise, r=0.3, step=(0.01, 0.001), seed=0,
             rmax = rmax_prev
 
     data_noise[x_inds, y_inds, z_inds, :] = signal_noise
-
-    return data_noise, SNR_corr, rmax, 
+    
+    # Save signal and data
+    if save:
+        np.savetxt('data/simulazione_results/{}square_signal.1D'.format(save), signal, delimiter=' ')
+        save_images(data_noise, '{}data_noise'.format(save))
+    
+    return data_noise, SNR_corr, rmax
 
 def seminate_mask(task, ROI_mask, data_noise, r=0.3, step=(0.01, 0.001), seed=0, save=None):
     
@@ -207,11 +208,6 @@ def seminate_mask(task, ROI_mask, data_noise, r=0.3, step=(0.01, 0.001), seed=0,
     betas = np.abs(np.random.randn(task.shape[2]))
     signal = np.dot(task, betas)
 
-    # Save signal and betas
-    if save:
-        np.savetxt('data/simulazione_results/{}/signal.1D'.format(save), signal, delimiter=' ')
-        np.savetxt('data/simulazione_results/{}/betas.1D'.format(save), betas, delimiter=' ')
-
     # Verify that desired R falls within reasonable range     
     if r < 0:
         print('The desired R is < 0, considered |R|')
@@ -258,6 +254,12 @@ def seminate_mask(task, ROI_mask, data_noise, r=0.3, step=(0.01, 0.001), seed=0,
             rmax = rmax_prev
 
     data_noise[x_inds, y_inds, z_inds, :] = signal_noise
+
+    # Save signal and betas
+    if save:
+        np.savetxt('data/simulazione_results/{}signal.1D'.format(save), signal, delimiter=' ')
+        np.savetxt('data/simulazione_results/{}betas.1D'.format(save), betas, delimiter=' ')
+        save_images(data_noise, '{}data_noise'.format(save))
 
     return data_noise, SNR_corr, rmax
 
@@ -739,8 +741,8 @@ def simulation_pipeline(n_subs, add_noise_bool, add_trend_bool, add_motion_bool,
         print('Sub {}. Done with: generating random noise. It took:  {}  seconds'.format(sub+1, time.time() - tstart))
 
         # Create fMRI signal starting from task and seminate only in mask
-        data_signal, SNR, rmax = seminate_squarewave(semination_mask, data_init, R[sub], seed=seed_schema[sub,-1], save='sub{}/semina'.format(sub+1))
-        #data_signal, SNR, rmax = seminate_mask(task_downsampled_byslice, semination_mask, data_init, R[sub], seed=seed_schema[sub,-1], save='sub{}/semina'.format(sub+1))
+        data_signal, SNR, rmax = seminate_squarewave(semination_mask, data_init, R[sub], seed=seed_schema[sub,-1], save='sub{}/semina/{}'.format(sub+1, filename_suffix))
+        #data_signal, SNR, rmax = seminate_mask(task_downsampled_byslice, semination_mask, data_init, R[sub], seed=seed_schema[sub,-1],save='sub{}/semina/{}'.format(sub+1, filename_suffix))
         print('Sub {}. Creating fMRI signal from task. Used SNR = {} to reach maximum R = {}'.format(sub+1, SNR, rmax))
         print('Sub {}. Done with: creating fMRI signal from task. It took:  {}  seconds'.format(sub+1, time.time() - tstart))
 
