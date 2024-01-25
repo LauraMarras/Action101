@@ -715,7 +715,7 @@ def simulation_pipeline(n_subs, add_noise_bool, add_trend_bool, add_motion_bool,
         # Load fMRI data and Mask (voxels where to seminate task signal)
         global data_nii
         data_nii = image.load_img('data/simulazione_datasets/old_Data/sub-02/run1_template.nii')#.format(sub+1))
-        mask_nii = image.load_img('data/simulazione_datasets/old_Data/sub-02/roi_109.nii.gz')#.format(sub+1))
+        mask_nii = image.load_img('data/simulazione_datasets/old_Data/sub-02/roi_109.nii')#.format(sub+1))
 
         fmri_data = data_nii.get_fdata()[:,:,:,0] # Get single volume
         semination_mask = mask_nii.get_fdata()
