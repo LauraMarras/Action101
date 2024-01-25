@@ -714,8 +714,8 @@ def simulation_pipeline(n_subs, add_noise_bool, add_trend_bool, add_motion_bool,
 
         # Load fMRI data and Mask (voxels where to seminate task signal)
         global data_nii
-        data_nii = image.load_img('data/simulazione_datasets/sub-0{}/run1_template.nii'.format(sub+1))
-        mask_nii = image.load_img('data/simulazione_datasets/sub-0{}/mask_2orig.nii.gz'.format(sub+1))
+        data_nii = image.load_img('data/simulazione_datasets/old_Data/sub-02/run1_template.nii')#.format(sub+1))
+        mask_nii = image.load_img('data/simulazione_datasets/old_Data/sub-02/roi_109.nii.gz')#.format(sub+1))
 
         fmri_data = data_nii.get_fdata()[:,:,:,0] # Get single volume
         semination_mask = mask_nii.get_fdata()
@@ -741,8 +741,7 @@ def simulation_pipeline(n_subs, add_noise_bool, add_trend_bool, add_motion_bool,
         print('Sub {}. Done with: generating random noise. It took:  {}  seconds'.format(sub+1, time.time() - tstart))
 
         # Create fMRI signal starting from task and seminate only in mask
-        data_signal, SNR, rmax = seminate_squarewave(semination_mask, data_init, R[sub], seed=seed_schema[sub,-1], save='sub{}/semina/{}'.format(sub+1, filename_suffix))
-        #data_signal, SNR, rmax = seminate_mask(task_downsampled_byslice, semination_mask, data_init, R[sub], seed=seed_schema[sub,-1],save='sub{}/semina/{}'.format(sub+1, filename_suffix))
+        data_signal, SNR, rmax = seminate_mask(task_downsampled_byslice, semination_mask, data_init, R[sub], seed=seed_schema[sub,-1],save='sub{}/semina/{}'.format(sub+1, filename_suffix))
         print('Sub {}. Creating fMRI signal from task. Used SNR = {} to reach maximum R = {}'.format(sub+1, SNR, rmax))
         print('Sub {}. Done with: creating fMRI signal from task. It took:  {}  seconds'.format(sub+1, time.time() - tstart))
 
@@ -806,7 +805,7 @@ if __name__ == '__main__':
     
     # Saving options
     save = True
-    filename_suffix = 'square_sig'
+    filename_suffix = 'roi_109'
     
     # Call Pipeline
     simulation_pipeline(n_subs, add_noise_bool, add_trend_bool, add_motion_bool, save, filename_suffix)
