@@ -34,8 +34,8 @@ if __name__ == '__main__':
     t = time.time()
 
     # Set parameters
-    sub=1
-    n_perms = 10 #1000
+    sub=6
+    n_perms = 3 #1000
     chunk_size = 15 # add check max action duration
     seed = 0
 
@@ -56,7 +56,7 @@ if __name__ == '__main__':
 
     # Load Data
     data = image.load_img('data/simulazione_results/sub-0{}/func/cleaned.nii.gz'.format(sub+1)).get_fdata()
-    atlas = image.load_img('data/simulazione_datasets/sub-0{}/atlas_2orig.nii.gz'.format(sub+1)).get_fdata()
+    atlas = image.load_img('data/simulazione_datasets/old_Data/sub-02/atlas_2orig.nii.gz').get_fdata()
 
     # Extract rois
     data_rois, n_rois = extract_roi(data, atlas)
@@ -76,7 +76,7 @@ if __name__ == '__main__':
     pool = mp.Pool(20)
 
     for r, roi in data_rois.items():
-        result_pool = pool.apply_async(run_canoncorr, args=(roi, perm_schema, domains, False))
+        result_pool = pool.apply_async(run_canoncorr, args=(roi, perm_schema, domains, True))
         results_pool.append(result_pool)
     
     pool.close()
@@ -86,7 +86,7 @@ if __name__ == '__main__':
         njob = result_pool._job
         result_matrix[njob, :, :] = result_pool.get()
             
-    np.save('data/results/results_sub-0{}_notadj'.format(sub+1), result_matrix)
+    np.save('data/results/results_sub-0{}'.format(sub+1), result_matrix)
     
     print('time to run cca for each roi, with {} permutations:       '.format(n_perms), (time.time() - t1))
 
