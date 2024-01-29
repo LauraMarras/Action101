@@ -95,7 +95,7 @@ def compute_correlation(SNR, data_noise, signal, x_inds, y_inds, z_inds, seed=0)
     return rmax, SNR, signal_noise
 
 @timeit
-def seminate_mask(task, ROI_mask, data_noise, r=0.3, step=(0.01, 0.001), seed=0, save=None, sub=0, reference=None):
+def seminate_mask(task, ROI_mask, data_noise, r=0.3, betas=None, step=(0.01, 0.001), seed=0, save=None, sub=0, reference=None):
     
     """
     Create fMRI signal based task regressors and desired R correlation coefficient, and assign it to voxels within ROI
@@ -105,6 +105,7 @@ def seminate_mask(task, ROI_mask, data_noise, r=0.3, step=(0.01, 0.001), seed=0,
     - ROI_mask : array, 3d matrix of booleans of shape = x by y by z indicating voxel within ROI
     - data_noise : array, 4d matrix of shape = x by y by slices containing HRF-convoluted rnadom noise
     - r : float, desired maximum correlation coefficient between task signal and signal scaled by SNR with added noise; default = 0.3
+    - betas :
     - step : tuple, tuple of len = 2, indicating gridsearch intervals; default = (0.01, 0.001)
     - seed : int, seed for random generation of betas; default = 0
     - save : str, path where (whether) to save signal and beta coefficients as 1D files; default = None
@@ -131,8 +132,12 @@ def seminate_mask(task, ROI_mask, data_noise, r=0.3, step=(0.01, 0.001), seed=0,
     # Set seed
     np.random.seed(seed)
     
-    # Create signal by multiply task data by random betas
-    betas = np.abs(np.random.randn(task.shape[2]))
+    # Create signal by multiply task data by given or random betas
+    if betas:
+        betas = np.ones(task.shape[2]) * betas
+    else:
+        betas = np.abs(np.random.randn(task.shape[2]))
+    
     signal = np.dot(task, betas)
 
     # Verify that desired R falls within reasonable range     
@@ -654,7 +659,7 @@ def simulate_subject(sub, fmri_params, task_params, motion_params, seed_schema, 
         data_init = add_noise(data_init, fmri_params['noise_level'], fmri_params['TR'], seed_schema[-2], sub=sub, reference=template_nii)
 
     # Create fMRI signal starting from task and seminate only in mask
-    data_signal = seminate_mask(task_downsampled_byslice, semination_mask, data_init, fmri_params['R'], seed=seed_schema[-1], sub=sub, reference=template_nii)
+    data_signal = seminate_mask(task_downsampled_byslice, semination_mask, data_init, fmri_params['R'], fmri_params['betas'], seed=seed_schema[-1], sub=sub, reference=template_nii)
 
     # Segment
     tissues_mask = segment(template_avg, fmri_params['n_tissues'], use_threshold=False, plot=False, sub=sub, reference=template_nii)
@@ -704,10 +709,11 @@ if __name__ == '__main__':
     TR = 2
     np.random.seed(0)
     R = np.random.uniform(0.2, 0.71, n_subs)
+    betas = None # In this case, we generate random betas # 1
     noise_level = 4
     n_tissues = 4 # air, white matter, grey matter, csf
     n_bins_trend = 80
-    semination_mask = 'mask_2orig.nii.gz' # In this case, we seminate the same roi in all subjects (manually created in advance)
+    semination_mask = 'mask_2orig.nii.gz' # In this case, we seminate the same roi in all subjects (manually created in advance) # 'roi_109.nii' 
 
     # Define motion parameters
     movement_upscale = 1
@@ -726,9 +732,9 @@ if __name__ == '__main__':
     seed_schema = np.reshape(np.arange(0,((n_runs*2)+2)*n_subs), (n_subs,n_runs*2+2))
 
     # Sub loop
-    for sub in sub_list:
+    for s, sub in enumerate(sub_list):
 
-        fmri_params = {'TR': TR, 'R': R[sub], 'noise_level': noise_level, 'n_tissues': n_tissues, 'n_bins_trend': n_bins_trend, 'semination_mask': semination_mask} # In this case, the goal R is different for each subject
+        fmri_params = {'TR': TR, 'R': R[s], 'betas': betas, 'noise_level': noise_level, 'n_tissues': n_tissues, 'n_bins_trend': n_bins_trend, 'semination_mask': semination_mask} # In this case, the goal R is different for each subject
         task_params = {'task_path': task_path, 'task_time_res': task_time_res, 'n_runs': n_runs, 'run_cuts': run_cuts} # In this case, the task regressors are identical for each subject
         motion_params = {'movement_upscale': movement_upscale, 'regressors_path': regressors_path}
 
@@ -739,11 +745,11 @@ if __name__ == '__main__':
         print('Simulation of sub-{}'.format(sub+1))
         print('- task parameters: {}'.format(task_params))
         print('- fMRI parameters: {}'.format(fmri_params))
-        print('- seed schema: {}'.format(seed_schema[sub]))
+        print('- seed schema: {}'.format(seed_schema[s]))
         print('- options: {}'.format(options))
 
         # Call Pipeline
-        simulate_subject(sub+1, fmri_params, task_params, motion_params, seed_schema[sub], options)
+        simulate_subject(sub+1, fmri_params, task_params, motion_params, seed_schema[s], options)
     
         # Close textfile
         logfile.close()
