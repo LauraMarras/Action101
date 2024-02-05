@@ -150,17 +150,17 @@ def add_trend(data_run, volume, tissues_mask, scale_parameter=100, n_bins=1, see
 
         # Add jitter      
         for vox in range(n_bins):
-            xinds, y_inds, z_inds = (np.where(tissues_mask == tissue)[0][drawn[vox]], np.where(tissues_mask == tissue)[1][drawn[vox]], np.where(tissues_mask == tissue)[2][drawn[vox]])
+            x_inds, y_inds, z_inds = (np.where(tissues_mask == tissue)[0][drawn[vox]], np.where(tissues_mask == tissue)[1][drawn[vox]], np.where(tissues_mask == tissue)[2][drawn[vox]])
             
             poly_jitt = np.abs(poly_scaled[:,tissue]/10*np.random.randn())+poly_scaled[:,tissue]
-            trend[xinds, y_inds, z_inds, :] = np.round(np.polyval(poly_jitt, np.arange(nTRs)))
-            poly_coeff_mat[xinds, y_inds, z_inds, :] = poly_jitt
+            trend[x_inds, y_inds, z_inds, :] = np.round(np.polyval(poly_jitt, np.arange(nTRs)))
+            poly_coeff_mat[x_inds, y_inds, z_inds, :] = poly_jitt
 
         if len(remaining) != 0:
-            xinds, y_inds, z_inds = (np.where(tissues_mask == tissue)[0][remaining], np.where(tissues_mask == tissue)[1][remaining], np.where(tissues_mask == tissue)[2][remaining])
+            x_inds, y_inds, z_inds = (np.where(tissues_mask == tissue)[0][remaining], np.where(tissues_mask == tissue)[1][remaining], np.where(tissues_mask == tissue)[2][remaining])
             poly_jitt = np.abs(poly_scaled[:,tissue]/10*np.random.randn())+poly_scaled[:,tissue]
-            trend[xinds, y_inds, z_inds, :] = np.round(np.polyval(poly_jitt, np.arange(nTRs)))
-            poly_coeff_mat[xinds, y_inds, z_inds, :] = poly_jitt
+            trend[x_inds, y_inds, z_inds, :] = np.round(np.polyval(poly_jitt, np.arange(nTRs)))
+            poly_coeff_mat[x_inds, y_inds, z_inds, :] = poly_jitt
             
     # Add trend to data
     data_trend = data_run + trend
