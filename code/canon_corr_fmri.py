@@ -7,6 +7,7 @@ os.environ['BLIS_NUM_THREADS'] = '1'
 from sklearn.cross_decomposition import CCA
 import numpy as np
 
+from nilearn import image
 from pareto_right_tail import pareto_right
 
 def canoncorrelation(X,Y, center=True, adjust=True):
@@ -70,10 +71,9 @@ def canoncorrelation(X,Y, center=True, adjust=True):
     # Adjust by number of X columns
     n = Y_pred.shape[0]
     p = Y_pred.shape[1]
-    if adjust:
-        r2 = 1 - (1-r2)*((n-1)/(n-p-1))
+    r2adj = 1 - (1-r2)*((n-1)/(n-p-1))
 
-    return r2, A, B, R, U, V
+    return r2, r2adj, A, B, R, U, V
 
 def permutation_schema(n_tpoints, n_perms=1000, chunk_size=15, seed=0, flip=True):
     
@@ -129,12 +129,14 @@ def run_canoncorr(roi, perm_schema, domains, adjust=True):
     
     Outputs:
     - results : matrix of shape = n_perms, n_domains; containing R2 values for each permutation and each domain
+    - resultsadj : matrix of shape = n_perms, n_domains; containing R2 values for each permutation and each domain
     """
     n_perms = perm_schema.shape[1]
     n_domains = len(domains)
     
     # Initialize results matrix
     results = np.full((n_perms, n_domains), np.nan)
+    results_adj = np.full((n_perms, n_domains), np.nan)
     
     for perm in range(n_perms):
         order = perm_schema[:,perm] # shape = n_tpoints --> indices
@@ -142,9 +144,12 @@ def run_canoncorr(roi, perm_schema, domains, adjust=True):
         
         for d, domain in enumerate(domains.values()):
             X = domain # shape = n_tpoints by n_columns
-            results[perm, d] = canoncorrelation(X, Y, adjust=adjust)[0]
+            
+            r2, r2adj, _, _, _, _, _ = canoncorrelation(X, Y, adjust=adjust)
+            results[perm, d] = r2
+            results_adj[perm, d] = r2adj
 
-    return results
+    return results, results_adj
 
 def pvals(results, critical_p=0.05, pareto=False, plot=False):
     
@@ -245,8 +250,21 @@ def gen_fmri_signal(t_points=1614, tr=2, n_voxels=100):
 
 
 if __name__ == '__main__':
+    
+    res = np.load('data/cca_results/sub-1/res_sub-1_adj_200.npy')
+    resna = np.load('data/cca_results/sub-1/res_sub-1_200.npy')
 
-    distro_domains = np.load('results_n05.npy')[0,:,:]
-    pvals_domains, criticalv_domains = pvals(distro_domains, pareto=False)
-    pvals_domains_par, criticalv_domains_par = pvals(distro_domains, pareto=True, plot=True)
+    intersect200 = image.load_img('data/simulazione_datasets/sub-1/anat/pippo200.nii').get_fdata()
+    rois = np.unique(intersect200)
+
+    # Initialize
+    pvals_domains_rois = np.full((len(rois), res.shape[-1]), np.nan)
+    pvals_domains_rois_pareto = np.full((len(rois), res.shape[-1]), np.nan)
+
+    for r, roi in enumerate(rois):
+        pvals_domains_rois[r], _ = pvals(res[int(roi-1)], pareto=False)
+        pvals_domains_rois_pareto[r], _ = pvals(res[int(roi-1)], pareto=True) #, plot=True)
+        
+        
+        
     print('d')
