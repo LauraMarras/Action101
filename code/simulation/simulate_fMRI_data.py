@@ -1,5 +1,6 @@
 import numpy as np
 import sys
+from datetime import date
 
 from simul_pipeline import simulate_subject
 
@@ -8,14 +9,15 @@ if __name__ == '__main__':
     orig_stdout = sys.stdout
 
     # Define options
-    sub_list = [5] #[*range(0,5)]
-    n_subs = len(sub_list)
-    options = {'add_noise_bool': True, 'add_trend_bool': False, 'add_motion_bool': False, 'save': False}
+    start = 7
+    n_subs = 3
+    sub_list = [*range(start, n_subs+start)]
+    options = {'add_noise_bool': True, 'add_trend_bool': True, 'add_motion_bool': True, 'save': True}
 
     # Define fMRI parameters
     TR = 2
     np.random.seed(0)
-    R = np.random.uniform(0.2, 0.71, n_subs)
+    R = np.array([0.1, 0.3, 0.5]) # np.random.uniform(0.2, 0.71, n_subs)
     betas = None # In this case, we generate random betas # 1
     n_bins_betas = 15
     noise_level = 4
@@ -37,7 +39,7 @@ if __name__ == '__main__':
     n_runs = len(run_dur_sec)
     
     # Create seed schema
-    seed_schema = np.reshape(np.arange(0,((n_runs*2)+2)*n_subs), (n_subs,n_runs*2+2))
+    seed_schema = np.reshape(np.arange(start,(((n_runs*2)+2)*n_subs)+start), (n_subs,n_runs*2+2))
 
     # Sub loop
     for s, sub in enumerate(sub_list):
@@ -47,17 +49,18 @@ if __name__ == '__main__':
         motion_params = {'movement_upscale': movement_upscale, 'regressors_path': regressors_path}
 
         # Print output to txt file
-        logfile = open('data/simulazione_results/logs/out_sub-{}.txt'.format(sub+1), 'w')
+        logfile = open('data/simulazione_results/logs/out_sub-{}.txt'.format(sub), 'w')
         sys.stdout = logfile
 
-        print('Simulation of sub-{}'.format(sub+1))
+        print(date.today())
+        print('Simulation of sub-{}'.format(sub))
         print('- task parameters: {}'.format(task_params))
         print('- fMRI parameters: {}'.format(fmri_params))
         print('- seed schema: {}'.format(seed_schema[s]))
         print('- options: {}'.format(options))
 
         # Call Pipeline
-        simulate_subject(sub+1, fmri_params, task_params, motion_params, seed_schema[s], options)
+        simulate_subject(sub, fmri_params, task_params, motion_params, seed_schema[s], options)
     
         # Close textfile
         logfile.close()
