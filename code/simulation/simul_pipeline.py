@@ -4,10 +4,10 @@ from nilearn import image
 from scipy.stats import zscore
 
 from utils.exectime_decor import timeit
-from simulation.semination_funcs import downsample_timeshift, seminate_mask
-from simulation.noise_funcs import add_noise
-from simulation.motion_funcs import add_motion
-from simulation.trend_funcs import segment, add_trend
+from semination_funcs import downsample_timeshift, seminate_mask
+from noise_funcs import add_noise
+from motion_funcs import add_motion
+from trend_funcs import segment, add_trend
 
 @timeit
 def simulate_subject(sub, fmri_params, task_params, motion_params, seed_schema, options):
@@ -21,6 +21,7 @@ def simulate_subject(sub, fmri_params, task_params, motion_params, seed_schema, 
         - TR : int or float, fMRI resolution, in seconds
         - R : float, desired maximum correlation coefficient between task signal and signal scaled by SNR with added noise
         - betas : int, float or array of shape = n_task_regressor(s), correlation coefficient(s) to scale task regressor(s), if None, they are drawn randomly
+        - n_bins_betas : int, number of bins for adding variation to betas across voxels, 0 means no variation
         - noise_level : int or float, indicates scale of gaussian noise
         - n_tissues : int, number of populations to segment the volume into (usually air/CSF/white/grey), for trend generation
         - n_bins_trend : int, number of bins for adding variation to trend coefficients within tissues
@@ -79,10 +80,11 @@ def simulate_subject(sub, fmri_params, task_params, motion_params, seed_schema, 
         data_init = add_noise(data_init, fmri_params['noise_level'], fmri_params['TR'], seed_schema[-2], sub=sub, reference=template_nii)
 
     # Create fMRI signal starting from task and seminate only in mask
-    data_signal = seminate_mask(task_downsampled_byslice, semination_mask, data_init, fmri_params['R'], fmri_params['betas'], seed=seed_schema[-1], sub=sub, reference=template_nii)
+    data_signal = seminate_mask(task_downsampled_byslice, semination_mask, data_init, fmri_params['R'], fmri_params['betas'], n_bins=fmri_params['n_bins_betas'], seed=seed_schema[-1], sub=sub, reference=template_nii)
 
     # Segment
-    tissues_mask = segment(template_avg, fmri_params['n_tissues'], use_threshold=False, plot=False, sub=sub, reference=template_nii)
+    if options['add_trend_bool']:
+        tissues_mask = segment(template_avg, fmri_params['n_tissues'], use_threshold=False, plot=False, sub=sub, reference=template_nii)
     
     # Iterate over runs
     for r in range(task_params['n_runs']):

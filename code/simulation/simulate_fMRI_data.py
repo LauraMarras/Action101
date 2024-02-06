@@ -1,22 +1,23 @@
 import numpy as np
 import sys
 
-from simulation.simul_pipeline import simulate_subject
+from simul_pipeline import simulate_subject
 
 if __name__ == '__main__':
     print('Starting')
     orig_stdout = sys.stdout
 
     # Define options
-    sub_list = [*range(0,5)]
+    sub_list = [5] #[*range(0,5)]
     n_subs = len(sub_list)
-    options = {'add_noise_bool': True, 'add_trend_bool': True, 'add_motion_bool': True, 'save': True}
+    options = {'add_noise_bool': True, 'add_trend_bool': False, 'add_motion_bool': False, 'save': False}
 
     # Define fMRI parameters
     TR = 2
     np.random.seed(0)
     R = np.random.uniform(0.2, 0.71, n_subs)
     betas = None # In this case, we generate random betas # 1
+    n_bins_betas = 15
     noise_level = 4
     n_tissues = 4 # air, white matter, grey matter, csf
     n_bins_trend = 80
@@ -41,7 +42,7 @@ if __name__ == '__main__':
     # Sub loop
     for s, sub in enumerate(sub_list):
 
-        fmri_params = {'TR': TR, 'R': R[s], 'betas': betas, 'noise_level': noise_level, 'n_tissues': n_tissues, 'n_bins_trend': n_bins_trend, 'semination_mask': semination_mask} # In this case, the goal R is different for each subject
+        fmri_params = {'TR': TR, 'R': R[s], 'betas': betas, 'n_bins_betas': n_bins_betas, 'noise_level': noise_level, 'n_tissues': n_tissues, 'n_bins_trend': n_bins_trend, 'semination_mask': semination_mask} # In this case, the goal R is different for each subject
         task_params = {'task_path': task_path, 'task_time_res': task_time_res, 'n_runs': n_runs, 'run_cuts': run_cuts} # In this case, the task regressors are identical for each subject
         motion_params = {'movement_upscale': movement_upscale, 'regressors_path': regressors_path}
 
