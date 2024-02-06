@@ -1,6 +1,7 @@
 import numpy as np
 import sys
 from datetime import date
+import os
 
 from simul_pipeline import simulate_subject
 
@@ -49,7 +50,11 @@ if __name__ == '__main__':
         motion_params = {'movement_upscale': movement_upscale, 'regressors_path': regressors_path}
 
         # Print output to txt file
-        logfile = open('data/simulazione_results/logs/out_sub-{}.txt'.format(sub), 'w')
+        logpath = 'data/simulazione_results/sub-{}/logs/'.format(sub)
+        if not os.path.exists(logpath):
+            os.makedirs(logpath)
+        
+        logfile = open('{}out_sub-{}.txt'.format(logpath, sub), 'w')
         sys.stdout = logfile
 
         print(date.today())
