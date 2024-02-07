@@ -10,7 +10,7 @@ import multiprocessing as mp
 from utils.exectime_decor import timeit
 from nilearn import image
 import sys
-from datetime import date
+from datetime import datetime
 
 from permutation_schema_func import permutation_schema
 
@@ -180,7 +180,7 @@ def run_cca_all_rois(data_rois, domains, perm_schema, pooln=20):
     n_perms = perm_schema.shape[1]
     
     # Initialize results matrix and dictionary
-    result_matrix = np.empty((n_rois, 2, n_perms+1, len(domains)))
+    result_matrix = np.empty((n_rois, 2, n_perms, len(domains)))
     result_dict = {}
 
     # Set pool
@@ -245,7 +245,7 @@ def run_cca_all_subjects(sub_list, atlas_file, n_perms=1000, chunk_size=15, seed
         logfile = open('{}log_cca_sub-{}_{}.txt'.format(log_path, sub, 'Schaefer200' if atlas_file == 'atlas_2orig' else 'Schaefer1000'), 'w')
         sys.stdout = logfile
 
-        print(date.today())
+        print(datetime.now())
         print('CCA of sub-{}'.format(sub))
         print('- n_perms: {}'.format(n_perms))
         print('- seed: {}'.format(seed))
