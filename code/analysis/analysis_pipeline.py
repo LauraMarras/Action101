@@ -1,5 +1,5 @@
 import numpy as np
-from analysis.canonical_correlation_funcs import run_cca_all_subjects
+from canonical_correlation_funcs import run_cca_all_subjects
 
 if __name__ == '__main__': 
 
@@ -12,7 +12,7 @@ if __name__ == '__main__':
 
     ## CCA
     atlas_file = 'atlas_2orig' # 'atlas1000_2orig.nii.gz'
-    pooln = 20
+    pooln = 25
 
     ## Permutation schema
     n_perms = 1000

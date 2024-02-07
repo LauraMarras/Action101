@@ -7,12 +7,12 @@ os.environ['BLIS_NUM_THREADS'] = '1'
 from sklearn.cross_decomposition import CCA
 import numpy as np
 import multiprocessing as mp
-from simulation.utils.exectime_decor import timeit
+from utils.exectime_decor import timeit
 from nilearn import image
 import sys
 from datetime import date
 
-from analysis.permutation_schema_func import permutation_schema
+from permutation_schema_func import permutation_schema
 
 def canonical_correlation(X,Y, center=True):
     
