@@ -259,7 +259,7 @@ def run_cca_all_subjects(sub_list, atlas_file, n_perms=1000, chunk_size=15, seed
         data_rois, n_rois, n_voxels = extract_roi(data, atlas)
         
         print('- n_rois: {}'.format(n_rois))
-        print('- n_voxels between {} and {}'.format(np.min(n_voxels.values()), np.max(n_voxels.values())))
+        print('- n_voxels between {} and {}'.format(np.min(list(n_voxels.values())), np.max(list(n_voxels.values()))))
 
         # Generate permutation schema
         n_tpoints = data.shape[-1]
