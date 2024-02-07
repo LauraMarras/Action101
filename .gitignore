@@ -6,3 +6,5 @@
 /code/fMRI_simulation
 /code/simulation/utils/__pycache__
 /code/simulation/__pycache__
+/code/analysis/utils/__pycache__
+/code/analysis/__pycache__
