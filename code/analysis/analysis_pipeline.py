@@ -1,3 +1,9 @@
+import os
+os.environ['OPENBLAS_NUM_THREADS'] = '1'
+os.environ['MKL_NUM_THREADS'] = '1'
+os.environ['OMP_NUM_THREADS'] = '1'
+os.environ['BLIS_NUM_THREADS'] = '1'
+
 import numpy as np
 from canonical_correlation_funcs import run_cca_all_subjects
 
@@ -6,13 +12,13 @@ if __name__ == '__main__':
     print('Starting CCA')
 
     # Set parameters
-    sub_list = np.array([7,8,9])
+    sub_list = np.array([7]) # 8,9
     n_subs = len(sub_list)
     save = True
 
     ## CCA
     atlas_file = 'atlas_2orig' # 'atlas1000_2orig.nii.gz'
-    pooln = 25
+    pooln = 5
 
     ## Permutation schema
     n_perms = 1000
