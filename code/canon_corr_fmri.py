@@ -10,7 +10,7 @@ import numpy as np
 from nilearn import image
 from pareto_right_tail import pareto_right
 
-def canoncorrelation(X,Y, center=True, adjust=True):
+def canoncorrelation(X,Y, center=True):
     
     """
     Performs canonical correlation analysis using sklearn.cross_decomposition CCA package
@@ -19,10 +19,10 @@ def canoncorrelation(X,Y, center=True, adjust=True):
     - X : matrix of shape n by d1
     - Y : matrix of shape n by d2
     - center: default = True; whether to remove the mean (columnwise) from each column of X and Y
-    - adjust: default = True; whether to correct for number of predictor columns
 
     Outputs:
-    - r2 : R-squared (Y*B = V), if adjusted = True, adjusted
+    - r2 : R-squared (Y*B = V)
+    - r2adj : R-squared (Y*B = V) adjusted
     - A : Sample canonical coefficients for X variables
     - B : Sample canonical coefficients for Y variables
     - r : Sample canonical correlations
@@ -70,7 +70,7 @@ def canoncorrelation(X,Y, center=True, adjust=True):
 
     # Adjust by number of X columns
     n = Y_pred.shape[0]
-    p = Y_pred.shape[1]
+    p = n_components
     r2adj = 1 - (1-r2)*((n-1)/(n-p-1))
 
     return r2, r2adj, A, B, R, U, V
@@ -116,7 +116,7 @@ def permutation_schema(n_tpoints, n_perms=1000, chunk_size=15, seed=0, flip=True
 
     return perm_schema
 
-def run_canoncorr(roi, perm_schema, domains, adjust=True):
+def run_canoncorr(roi, perm_schema, domains):
     
     """
     Run canonical correlation and store R2 between fMRI activity of a ROI and each domain model, first using real data and then permuted fMRI data
@@ -125,31 +125,34 @@ def run_canoncorr(roi, perm_schema, domains, adjust=True):
     - roi : matrix containing fMRI data of shape = n_tpoints by n_voxels
     - perm_schema : matrix of shape = n_tpoints, n_perms; first row contains unshuffled indices --> contains indices for each permutation
     - domains : dictionary containing domains as keys and matrix of shape n_tpoints by n_columns as values
-    - adjust : whether to get adjusted R2 or not, default = True
     
     Outputs:
-    - results : matrix of shape = n_perms, n_domains; containing R2 values for each permutation and each domain
-    - resultsadj : matrix of shape = n_perms, n_domains; containing R2 values for each permutation and each domain
+    - results : matrix of shape = 2, n_perms, n_domains; containing R2 values (not adjusted and adjusted) for each permutation and each domain
     """
+    
+    # Get number of permutations and number of domains
     n_perms = perm_schema.shape[1]
     n_domains = len(domains)
     
     # Initialize results matrix
-    results = np.full((n_perms, n_domains), np.nan)
-    results_adj = np.full((n_perms, n_domains), np.nan)
+    results = np.full((2, n_perms, n_domains), np.nan)
     
+    # Run canonical correlation analysis for each permutation 
     for perm in range(n_perms):
-        order = perm_schema[:,perm] # shape = n_tpoints --> indices
-        Y = roi[order,:] # reorder fmri signal based on permutation schema
         
+        # Shuffle fmri signal based on permutation schema
+        order = perm_schema[:, perm]
+        Y = roi[order, :]
+        
+        # Run cca for each domain
         for d, domain in enumerate(domains.values()):
-            X = domain # shape = n_tpoints by n_columns
+            X = domain
             
-            r2, r2adj, _, _, _, _, _ = canoncorrelation(X, Y, adjust=adjust)
-            results[perm, d] = r2
-            results_adj[perm, d] = r2adj
+            r2, r2adj, _, _, _, _, _ = canoncorrelation(X, Y)
+            results[0, perm, d] = r2
+            results[1, perm, d] = r2adj
 
-    return results, results_adj
+    return results
 
 def pvals(results, critical_p=0.05, pareto=False, plot=False):
     
@@ -258,12 +261,12 @@ if __name__ == '__main__':
     rois = np.unique(intersect200)
 
     # Initialize
-    pvals_domains_rois = np.full((len(rois), res.shape[-1]), np.nan)
-    pvals_domains_rois_pareto = np.full((len(rois), res.shape[-1]), np.nan)
+    pvals_domains_rois = np.full((len(rois), resna.shape[-1]), np.nan)
+    pvals_domains_rois_pareto = np.full((len(rois), resna.shape[-1]), np.nan)
 
     for r, roi in enumerate(rois):
-        pvals_domains_rois[r], _ = pvals(res[int(roi-1)], pareto=False)
-        pvals_domains_rois_pareto[r], _ = pvals(res[int(roi-1)], pareto=True) #, plot=True)
+        pvals_domains_rois[r], _ = pvals(resna[int(roi-1)], pareto=False)
+        pvals_domains_rois_pareto[r], _ = pvals(resna[int(roi-1)], pareto=True) #, plot=True)
         
         
         
