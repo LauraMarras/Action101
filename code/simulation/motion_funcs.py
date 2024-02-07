@@ -3,6 +3,7 @@ import os
 from scipy.ndimage import zoom, affine_transform
 from skimage import transform
 from utils.exectime_decor import timeit
+from matplotlib import pyplot as plt
 
 def get_movoffset_fromdata(nTRs, regressors_path, dimensions=(2,2,3), seed=0):
     
@@ -92,6 +93,90 @@ def affine_transformation(volume, movement_offsets, upscalefactor=1):
         trans_volume = zoom(trans_volume, 1/upscalefactor, mode='nearest', order=0)
 
     return trans_volume
+
+def plot_transform(original, transformed, off, xyz=(64, 64, 19), save=None, cross=True):
+    
+    """
+    Plots 3d view of original and transformed MRI volumes
+
+    Inputs:
+    - original : matrix of shape x by y by s
+    - transformed : matrix of shape x by y by s (output of affine_transform)
+    - off : movement offsets, array of shape 6 (3 rotation and 3 traslation)
+    - xyz : tuple of len=3 indicating slices to show; default = (64, 64, 19)
+    - save : filename_suffix to save figure, if want to save; default = None
+    - cross : whether to add crosses indicating slices; default = True
+    
+    Saves:
+    - saves or shows figure
+    """
+    
+    # Get slice coords
+    x,y,s = xyz
+    
+    # Create figure with 6 subplots
+    fig, axs = plt.subplots(3,2, gridspec_kw=dict(height_ratios=[128/38, 1, 1], width_ratios=[1,1]),  sharex=True, sharey=False)
+    
+    # Axial
+    axs[0,0].imshow(original[:,:,s])
+    axs[0,1].imshow(transformed[:,:,s])
+   
+    # Sagittal
+    axs[1,0].imshow(original[x,:,:].T)
+    axs[1,1].imshow(transformed[x,:,:].T)
+    
+    # Coronal
+    axs[2,0].imshow(original[:,y,:].T)
+    axs[2,1].imshow(transformed[:,y,:].T)
+    
+    # Invert axes
+    for ax in fig.axes:
+        ax.invert_yaxis()
+    
+    # Add crosses
+    if cross:
+        axs[0,0].axvline(y, lw=0.5, ls='--', color='r')
+        axs[0,1].axvline(y, lw=0.5, ls='--', color='r')
+        axs[0,0].axhline(x, lw=0.5, ls='--', color='r')
+        axs[0,1].axhline(x, lw=0.5, ls='--', color='r')
+
+        axs[1,0].axvline(y, lw=0.5, ls='--', color='r')
+        axs[1,1].axvline(y, lw=0.5, ls='--', color='r')
+        axs[1,0].axhline(s, lw=0.5, ls='--', color='r')
+        axs[1,1].axhline(s, lw=0.5, ls='--', color='r')
+
+        axs[2,0].axvline(x, lw=0.5, ls='--', color='r')
+        axs[2,1].axvline(x, lw=0.5, ls='--', color='r')
+        axs[2,0].axhline(s, lw=0.5, ls='--', color='r')
+        axs[2,1].axhline(s, lw=0.5, ls='--', color='r')
+
+    # Add Titles
+    axs[0,0].set_title('Original Volume', fontsize=12)
+    axs[0,1].set_title('Transformed Volume', fontsize=12)
+
+    axs[0,0].set_ylabel('Axial \n(z={})'.format(s))
+    axs[1,0].set_ylabel('Sagittal \n(x={})'.format(x))
+    axs[2,0].set_ylabel('Coronal \n(y={})'.format(y))
+
+    # Add transformation parameters
+    off = np.round(off,3)
+    plt.text(0.01, 0.99,
+             'traslation:\nx={}  y={}  z={}'.format(off[3], off[4], off[5]),
+             verticalalignment='top', horizontalalignment='left',
+             transform=plt.gcf().transFigure,
+             color='purple', fontsize=9)
+    
+    plt.text(0.51, 0.99,
+             'rotation:\npitch={}  roll={}  yaw={}'.format(off[0], off[1], off[2]),
+             verticalalignment='top', horizontalalignment='left',
+             transform=plt.gcf().transFigure,
+             color='green', fontsize=9)
+
+    # Save
+    if save:
+        plt.savefig(save)
+    else:
+        plt.show()
 
 @timeit
 def add_motion(data_run, dimensions, regressors_path, upscalefactor=1, seed=0, save=None, sub=0, run=0):
