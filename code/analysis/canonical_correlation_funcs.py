@@ -274,7 +274,7 @@ def run_cca_all_subjects(sub_list, atlas_file, n_perms=1000, chunk_size=15, seed
             if not os.path.exists(folder_path):
                 os.makedirs(folder_path)
 
-            np.savez('CCA_res_sub-{}_{}'.format(folder_path, sub, 'Schaefer200' if atlas_file == 'atlas_2orig' else 'Schaefer1000'), result_matrix=result_matrix, result_dict=result_dict)
+            np.savez('{}CCA_res_sub-{}_{}'.format(folder_path, sub, 'Schaefer200' if atlas_file == 'atlas_2orig' else 'Schaefer1000'), result_matrix=result_matrix, result_dict=result_dict)
         
         # Close textfile
         logfile.close()
