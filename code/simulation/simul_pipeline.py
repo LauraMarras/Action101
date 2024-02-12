@@ -69,8 +69,9 @@ def simulate_subject(sub, fmri_params, task_params, motion_params, seed_schema, 
     task = np.loadtxt(task_params['task_path'], delimiter=',', skiprows=1)[:, 1:] # In this case we skip the first column as it contains indices
     task = np.atleast_2d(task.T).T # Make sure the matrix is 2d even when the regressor is only one
 
+    
     # Downsample convolved regressors back to TR resolution and add timeshift for each slice    
-    task_downsampled_byslice = downsample_timeshift(task, slices, task_params['task_time_res'], fmri_params['TR'])
+    task_downsampled_byslice = downsample_timeshift(task, slices, fmri_params['TR'])
 
     # Initialize data matrix
     data_init = np.zeros((x, y, slices, task_downsampled_byslice.shape[1]))

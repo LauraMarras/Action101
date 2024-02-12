@@ -10,8 +10,8 @@ if __name__ == '__main__':
     orig_stdout = sys.stdout
 
     # Define options
-    start = 7
-    n_subs = 3
+    start = 1
+    n_subs = 1
     sub_list = [*range(start, n_subs+start)]
     options = {'add_noise_bool': True, 'add_trend_bool': True, 'add_motion_bool': True, 'save': True}
 
@@ -33,7 +33,6 @@ if __name__ == '__main__':
     # Define task parameters
     domain = 'agent_objective' # In this case we seminate the same model in all subjects
     task_path = 'data/models/domains/group_us_conv_{}.csv'.format(domain)
-    task_time_res = 0.05
     run_dur_sec = [536,450,640,650,472,480] # duration of each run in seconds
     run_dur_TR = (np.array(run_dur_sec)/TR).astype(int) # duration of each run in TRs
     run_cuts = np.array(list(zip((np.cumsum(run_dur_TR) - run_dur_TR), np.cumsum(run_dur_TR))))
@@ -46,11 +45,11 @@ if __name__ == '__main__':
     for s, sub in enumerate(sub_list):
 
         fmri_params = {'TR': TR, 'R': R[s], 'betas': betas, 'n_bins_betas': n_bins_betas, 'noise_level': noise_level, 'n_tissues': n_tissues, 'n_bins_trend': n_bins_trend, 'semination_mask': semination_mask} # In this case, the goal R is different for each subject
-        task_params = {'task_path': task_path, 'task_time_res': task_time_res, 'n_runs': n_runs, 'run_cuts': run_cuts} # In this case, the task regressors are identical for each subject
+        task_params = {'task_path': task_path, 'n_runs': n_runs, 'run_cuts': run_cuts} # In this case, the task regressors are identical for each subject
         motion_params = {'movement_upscale': movement_upscale, 'regressors_path': regressors_path}
 
         # Print output to txt file
-        logpath = 'data/simulazione_results/sub-{}/logs/'.format(sub)
+        logpath = 'data/simulazione_results/sub-{}/logs/'.format(str(sub)+'__debug')
         if not os.path.exists(logpath):
             os.makedirs(logpath)
         

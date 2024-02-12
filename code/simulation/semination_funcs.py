@@ -5,7 +5,7 @@ from utils.exectime_decor import timeit
 
 
 @timeit
-def downsample_timeshift(task, n_slices, task_time_res=0.05, TR=2):
+def downsample_timeshift(task, n_slices, TR=2):
     
     """
     Downsample task data to TR resolution and create time shift over slices
@@ -13,7 +13,6 @@ def downsample_timeshift(task, n_slices, task_time_res=0.05, TR=2):
     Inputs:
     - task : array, 2d matrix of shape n_timepoints (in task time resolution) by n_task_regressor(s)
     - n_slices : int, number of fMRI volume slices
-    - task_time_res : float, sampling interval of task in seconds; default = 0.05
     - TR : int or float, fMRI resolution, in seconds; default = 2
    
     Outputs:
@@ -21,6 +20,7 @@ def downsample_timeshift(task, n_slices, task_time_res=0.05, TR=2):
     """
 
     # Get dimensions
+    task_time_res = np.round((TR/n_slices), 2)
     n_points = int(task.shape[0]/TR*task_time_res)
 
     # Downsample convolved regressors back to TR resolution and add timeshift for each slice
