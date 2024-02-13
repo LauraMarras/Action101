@@ -145,17 +145,33 @@ def pvals(results, critical_p=0.05, pareto=False, plot=False):
 
     return pvals, critical_values_at_p, pvals_all
 
-def fisher_sum(pvals_all_subs):
+def fisher_sum(pvals_all_subs, critical_p=0.05):
 
     n_test = pvals_all_subs.shape[-1]
+    n_domains = pvals_all_subs.shape[1]
+    n_perms = pvals_all_subs.shape[0]
 
     t = -2 * (np.sum(np.log(pvals_all_subs), axis=2))
     pval = 1-(chi2.cdf(t, 2*n_test))
 
-    return pval
+    # Pareto
+    # Initialize results matrices
+    pval_aggreg = np.empty(n_domains)
+    t_aggreg = np.empty(n_domains)
+
+    for d in range(n_domains):
+        pval_aggreg[d], _ = pareto_right(1-pval[:,d], critical_p=critical_p)
+        t_aggreg[d], _ = pareto_right(t[:,d], critical_p=critical_p)
+
+    return pval, t, pval_aggreg, t_aggreg
 
 
 if __name__ == '__main__':
+    atlas = image.load_img('../../Atlases/Schaefer-200_7Networks_ICBM152_Allin.nii.gz')
+    atlas_data = atlas.get_fdata()
+    atlas_rois = np.unique(atlas_data).astype(int)
+    atlas_rois = np.delete(atlas_rois, np.argwhere(atlas_rois==0))
+    x,y,z = atlas_data.shape
 
     rois_7 = np.unique(image.load_img('data/simulazione_datasets/sub-7/anat/ROIsem200.nii').get_fdata())
     rois_8 = np.unique(image.load_img('data/simulazione_datasets/sub-8/anat/ROIsem200.nii').get_fdata())
@@ -173,8 +189,13 @@ if __name__ == '__main__':
 
     
     pvals_group = np.empty((n_perms, n_doms, n_rois))
+    t_group = np.empty((n_perms, n_doms, n_rois))
+    pval_aggreg = np.empty((n_doms, n_rois))
+    t_aggreg = np.empty((n_doms, n_rois))
+
+    res_group = np.empty((n_doms, n_rois, n_subs))
     
-    for roi in np.arange(1, n_rois):
+    for roi in atlas_rois:
         
         # Initialize
         pvals_all_subs = np.empty((n_perms, n_doms, n_subs))
@@ -182,8 +203,31 @@ if __name__ == '__main__':
         for s, sub in enumerate(sub_list):
             res = np.load('data/cca_results/sub-{}/CCA_res_sub-{}_Schaefer200.npz'.format(sub, sub), allow_pickle=True)['result_dict'].item()
             _, _, pvals_all_subs[:,:,s] = pvals(res[roi][1], pareto=False)
+
+            res_group[:,roi-1,s] = res[roi][1,0,:]
             
         # Fisher
-        pvals_group[:,:, roi-1] = fisher_sum(pvals_all_subs)
+        pvals_group[:,:, roi-1], t_group[:,:, roi-1], pval_aggreg[:,roi-1], t_aggreg[:,roi-1] = fisher_sum(pvals_all_subs)
+
+    res_avg = np.mean(res_group, axis=2)
+
+
+    
+
+    image_final = np.zeros((x,y,z,n_doms*2))
+
+    for roi in atlas_rois:
+        x_inds, y_inds, z_inds = np.where(atlas_data==roi)
+        
+        image_final[x_inds, y_inds, z_inds, :n_doms] = res_avg[:, roi-1]
+        image_final[x_inds, y_inds, z_inds, n_doms:] = 1-pval_aggreg[:, roi-1]
+
+
+    folder_path = 'data/cca_results/group/'
+    if not os.path.exists(folder_path):
+        os.makedirs(folder_path)
+
+    img = image.new_img_like(atlas, image_final, affine=atlas.affine, copy_header=False)
+    img.to_filename('{}cca_results_group.nii'.format(folder_path))
 
     print('f')
