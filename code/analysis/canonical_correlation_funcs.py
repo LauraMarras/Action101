@@ -202,13 +202,14 @@ def run_cca_all_rois(data_rois, domains, perm_schema, pooln=20):
 
     return result_matrix, result_dict
 
-def run_cca_all_subjects(sub_list, atlas_file, n_perms=1000, chunk_size=15, seed=0, pooln=20, save=True):
+def run_cca_all_subjects(sub_list, domains, atlas_file, n_perms=1000, chunk_size=15, seed=0, pooln=20, save=True):
     
     """
     Run canonical correlation for all subjects
     
     Inputs:
     - sub_list : array, 1d array containing sub numbers for which to run CCA
+    - domains : dict, including domain names as keys and domain regressors as values
     - atlas_file : str, filename of atlas to use
     - n_perms : int, number of permutations (columns); default = 1000
     - chunk_size: int, size of chunks to be kept contiguous, in TR; default = 15 (30s)
@@ -226,10 +227,6 @@ def run_cca_all_subjects(sub_list, atlas_file, n_perms=1000, chunk_size=15, seed
     - permutation_schema()
     - run_cca_all_rois()
     """
-
-    # Load task models
-    domains_list = ['space_movement', 'agent_objective', 'social_connectivity', 'emotion_expression', 'linguistic_predictiveness']
-    domains = {d: np.loadtxt('data/models/domains/group_ds_conv_{}.csv'.format(d), delimiter=',', skiprows=1)[:, 1:] for d in domains_list}
 
     # Set printing settings
     orig_stdout = sys.stdout
