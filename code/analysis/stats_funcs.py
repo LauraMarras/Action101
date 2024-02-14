@@ -126,7 +126,7 @@ def get_pval_pareto(results, tail_percentile=0.9, plot=''):
 
     return pvalue
 
-def get_pvals_sub(sub):
+def get_pvals_sub(sub, save=True):
     
     res_sub = np.load('data/cca_results/sub-{}/CCA_res_sub-{}_Schaefer200.npz'.format(sub, sub), allow_pickle=True)['result_dict'].item()
     pvals_sub = {}
@@ -137,9 +137,17 @@ def get_pvals_sub(sub):
         pvals_sub[roi] = np.array([get_pvals(res_roi[:,d]) for d in range(res_roi.shape[-1])]).T
         res_sub_dict[roi] = res_roi
 
+    if save:
+        path = 'data/cca_results/sub-{}/'.format(sub)
+        if not os.path.exists(path):
+            os.makedirs(path)
+        
+        np.savez(path + 'CCA_stats_sub-{}'.format(sub), pvals_sub=pvals_sub, res_sub_dict=res_sub_dict)  
+
+
     return res_sub_dict, pvals_sub
 
-def get_pvals_group(rois, pvals_subs, res_subs, n_perms, n_doms):
+def get_pvals_group(rois, pvals_subs, res_subs, n_perms, n_doms, save=True):
     
     pvals_group = {}
     results_group = {}
@@ -161,6 +169,13 @@ def get_pvals_group(rois, pvals_subs, res_subs, n_perms, n_doms):
 
         # Get non-parametric results on summed pvals (with pareto)
         pvals_group[roi] = np.array([get_pval_pareto((1-summed_pvals[:,d]), plot='{}_{}'.format(roi, d+1)) for d in range(n_doms)])
+
+    if save:
+        path = 'data/cca_results/group/'
+        if not os.path.exists(path):
+            os.makedirs(path)
+        
+        np.savez(path + 'CCA_stats_group', pvals_group=pvals_group, results_group=results_group)  
 
     return results_group, pvals_group
 
