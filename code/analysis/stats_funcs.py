@@ -69,7 +69,7 @@ def get_pvals(results):
 
     return pvals
 
-def get_pval_pareto(results, tail_percentile=0.9, plot=''):
+def get_pval_pareto(results, tail_percentile=0.9, plot=None):
 
     """
     Get p value modeling the null distribution tail using Pareto
@@ -77,9 +77,14 @@ def get_pval_pareto(results, tail_percentile=0.9, plot=''):
     Inputs:
     - results : array, 1d matrix of shape = n_perms containing R2 values for each permutation
     - tail_percentile : float, percentile of tail to model with Pareto; default = 0.9
+    - plot : str, ROI and domain name for wich to plot and save pareto; default = None, that is don't plot
     
     Outputs:
-    - pvalue : float
+    - pvalue : float, p value of getting true R by chance given null distribution
+
+    Calls:
+    - plot_pareto()
+    - get_pvals()
     """
 
     # Define critical value, null distribution and tail
@@ -117,6 +122,7 @@ def get_pval_pareto(results, tail_percentile=0.9, plot=''):
             # Select highest p-value across bins
             pvalue = (pvalue_emp[pvalue_emp > 0])[-1]
 
+        # Plot Pareto
         if plot:
             plot_pareto(right_tail, kHat, loc, sigmaHat, q, critical_value, pname=plot)
     
@@ -128,15 +134,35 @@ def get_pval_pareto(results, tail_percentile=0.9, plot=''):
 
 def get_pvals_sub(sub, save=True):
     
+    """
+    Get p values for each subject (each permutation and each domain)
+    
+    Inputs:
+    - sub : int, sub number
+    - save : bool, whether to save single subject's results; default=True
+
+    Outputs:
+    - res_sub_dict : dict, containing ROIs as keys and R2 results as values (2d array of shape = n_perms by n_doms)
+    - pvals_sub : dict, containing ROIs as keys and pvals as values (2d array of shape = n_perms by n_doms)
+
+    Calls:
+    - get_pvals()
+    """
+
+    # Load R2 results of single subject
     res_sub = np.load('data/cca_results/sub-{}/CCA_res_sub-{}_Schaefer200.npz'.format(sub, sub), allow_pickle=True)['result_dict'].item()
+    
+    # Initialize dictionaries
     pvals_sub = {}
     res_sub_dict = {}
 
+    # Iterate over ROIs and get R2 results and calculate p-values
     for roi in res_sub.keys():
         res_roi = res_sub[roi][1,:,:]
         pvals_sub[roi] = np.array([get_pvals(res_roi[:,d]) for d in range(res_roi.shape[-1])]).T
         res_sub_dict[roi] = res_roi
 
+    # Save results
     if save:
         path = 'data/cca_results/sub-{}/'.format(sub)
         if not os.path.exists(path):
@@ -144,11 +170,25 @@ def get_pvals_sub(sub, save=True):
         
         np.savez(path + 'CCA_stats_sub-{}'.format(sub), pvals_sub=pvals_sub, res_sub_dict=res_sub_dict)  
 
-
     return res_sub_dict, pvals_sub
 
 def get_pvals_group(rois, pvals_subs, res_subs, n_perms, n_doms, save=True):
     
+    """
+    Get p values for each subject (each permutation and each domain)
+    
+    Inputs:
+    - sub : int, sub number
+    - save : bool, whether to save single subject's results; default=True
+
+    Outputs:
+    - res_sub_dict : dict, containing ROIs as keys and R2 results as values (2d array of shape = n_perms by n_doms)
+    - pvals_sub : dict, containing ROIs as keys and pvals as values (2d array of shape = n_perms by n_doms)
+
+    Calls:
+    - get_pvals()
+    """
+
     pvals_group = {}
     results_group = {}
     
@@ -217,26 +257,26 @@ def save_nifti(atlas, n_doms, results_group, pvals_group, path):
     
 if __name__ == '__main__':
     
+    print('Starting statistical analyses')
+    
+    n_perms, n_doms, sub_list = 1000+1, 5, [7,8,9]
+
     # Load Atlas
     atlas = image.load_img('../../Atlases/Schaefer-200_7Networks_ICBM152_Allin.nii.gz')
     atlas_rois = np.unique(atlas.get_fdata()).astype(int)
     atlas_rois = np.delete(atlas_rois, np.argwhere(atlas_rois==0))
     
-    sub_list = [7,8,9]
-    
     # Get pvalues for all subjects
     results_subs = {}
     pvals_subs = {}
     for s, sub in enumerate(sub_list):
-        results_subs[sub], pvals_subs[sub] = get_pvals_sub(sub)
-
-    n_perms, n_doms = 1000+1, 5
+        results_subs[sub], pvals_subs[sub] = get_pvals_sub(sub, save=True)
 
     # Get group results
-    results_group, pvals_group = get_pvals_group(atlas_rois, pvals_subs, results_subs, n_perms, n_doms)
+    results_group, pvals_group = get_pvals_group(atlas_rois, pvals_subs, results_subs, n_perms+1, n_doms, save=True)
 
     # Save as nifti
     folder_path = 'data/cca_results/group/debug/'
     image_final = save_nifti(atlas, n_doms, results_group, pvals_group, folder_path)
-    
-    print('f')
+
+    print('Finished statistical analyses')
