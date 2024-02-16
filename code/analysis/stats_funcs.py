@@ -64,7 +64,7 @@ def plot_pareto(right_tail, kHat, loc, sigmaHat, q, critical_value, pname):
     fig.suptitle('ROI {} domain {}'.format(roi, dom))
 
     # Save figure
-    figpath = 'data/cca_results/group/debug/pareto/'
+    figpath = 'data/cca_results/group/pareto/'
     if not os.path.exists(figpath):
         os.makedirs(figpath)
 
@@ -334,7 +334,7 @@ if __name__ == '__main__':
     results_group, pvals_group = get_pvals_group(atlas_rois, pvals_subs, results_subs, n_perms+1, n_doms, save=True)
 
     # Save as nifti
-    folder_path = 'data/cca_results/group/debug/'
+    folder_path = 'data/cca_results/group/'
     image_final = save_nifti(atlas, n_doms, results_group, pvals_group, folder_path)
 
     print('Finished statistical analyses')
