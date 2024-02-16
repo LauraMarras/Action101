@@ -7,6 +7,20 @@ from nilearn import image
 
 def plot_pareto(right_tail, kHat, loc, sigmaHat, q, critical_value, pname):
     
+    """
+    Plot and save right tail of null distribution, Pareto and pvalues curves
+    
+    Inputs:
+    - right_tail : array, 1d array containing right tail of null distribution
+    - kHat : float, Pareto parameter estimated
+    - loc : float, Pareto parameter estimated
+    - sigmaHat : float, Pareto parameter estimated 
+    - q : float, value in null distribution at given percentile
+    - critical_value : float, True result
+    - pname : str, containing ROI number and domain number for which ti plot Pareto
+    """
+
+    # Estimate Pareto and Pvalues
     x = np.linspace(np.min(right_tail), np.max(right_tail)*1.5, 100)
     pdf = pareto.pdf(x, kHat, loc, sigmaHat)
     cdf = pareto.cdf(x, kHat, loc, sigmaHat)
@@ -15,39 +29,46 @@ def plot_pareto(right_tail, kHat, loc, sigmaHat, q, critical_value, pname):
     estimated_cum = pareto.cdf(critical_value-q, kHat, loc, sigmaHat)
     pvalue = 1 - (0.9 + (estimated_cum*(1 - 0.9)))
 
-    # Plot Pareto and histogram
+    # Create figure and axes
     plt.figure()
     fig, ax1 = plt.subplots()
-    ax1.spines['top'].set_visible(False)
-             
+
+    # Plot Pareto, histogram and critical value
     ax1.hist(right_tail+q, density=True, color='grey')
     pdf_plot, = ax1.plot(x+q, pdf, color='orange', label='pdf')
     critv = ax1.axvline(critical_value, color='red', label='critical value')
-    ax1.set_ylim([0, np.max(pdf)])
 
+    # Adjust y limits, axes, labels
+    ax1.set_ylim([0, np.max(pdf)])
+    ax1.spines['top'].set_visible(False)
     ax1.set_xlabel('R2')
     ax1.set_ylabel('Pareto pdf', color='orange')
 
+    # Add second y axis on the right
     ax2 = ax1.twinx()
+
+    # Plot pvalues, significance level, pvalue of critical value
     pvals, = ax2.plot(x+q, pvalues, color='C0', label='p values')
-    ax2.set_ylabel('p value', color='C0')
-    ax2.spines['top'].set_visible(False)
     ax2.axhline(0.05, color='brown', ls='--', alpha=0.2)
-    ax2.set_ylim([0, np.max(pvalues)])
     ax2.plot(critical_value, pvalue, marker='*', color='k')
     ax2.text(critical_value+(critical_value/500), pvalue+(pvalue/50), round(pvalue,3))
-    plt.legend([pdf_plot, critv, pvals], ["Pareto pdf", "critical value", "p values"])
     
-
+    # Adjust y limits, axes, labels
+    ax2.set_ylabel('p value', color='C0')
+    ax2.spines['top'].set_visible(False)
+    ax2.set_ylim([0, np.max(pvalues)])
+    
+    # Add legend and title
+    plt.legend([pdf_plot, critv, pvals], ["Pareto pdf", "critical value", "p values"])
     roi, dom = pname.split('_')
     fig.suptitle('ROI {} domain {}'.format(roi, dom))
 
+    # Save figure
     figpath = 'data/cca_results/group/debug/pareto/'
     if not os.path.exists(figpath):
         os.makedirs(figpath)
 
     fig.savefig('{}{}_pareto.png'.format(figpath, pname))
-
 
 def get_pvals(results):
     
@@ -68,6 +89,46 @@ def get_pvals(results):
     pvals = 1-((pos_all)/(results.shape[0]))
 
     return pvals
+
+def get_pvals_sub(sub, save=True):
+    
+    """
+    Get p values for each subject (each permutation and each domain)
+    
+    Inputs:
+    - sub : int, sub number
+    - save : bool, whether to save single subject's results; default=True
+
+    Outputs:
+    - res_sub_dict : dict, containing ROIs as keys and R2 results as values (2d array of shape = n_perms by n_doms)
+    - pvals_sub : dict, containing ROIs as keys and pvals as values (2d array of shape = n_perms by n_doms)
+
+    Calls:
+    - get_pvals()
+    """
+
+    # Load R2 results of single subject
+    res_sub = np.load('data/cca_results/sub-{}/CCA_res_sub-{}_Schaefer200.npz'.format(sub, sub), allow_pickle=True)['result_dict'].item()
+    
+    # Initialize dictionaries
+    pvals_sub = {}
+    res_sub_dict = {}
+
+    # Iterate over ROIs and get R2 results and calculate p-values
+    for roi in res_sub.keys():
+        res_roi = res_sub[roi][1,:,:]
+        pvals_sub[roi] = np.array([get_pvals(res_roi[:,d]) for d in range(res_roi.shape[-1])]).T
+        res_sub_dict[roi] = res_roi
+
+    # Save results
+    if save:
+        path = 'data/cca_results/sub-{}/'.format(sub)
+        if not os.path.exists(path):
+            os.makedirs(path)
+        
+        np.savez(path + 'CCA_stats_sub-{}'.format(sub), pvals_sub=pvals_sub, res_sub_dict=res_sub_dict)  
+
+    return res_sub_dict, pvals_sub
 
 def get_pval_pareto(results, tail_percentile=0.9, plot=None):
 
@@ -132,45 +193,27 @@ def get_pval_pareto(results, tail_percentile=0.9, plot=None):
 
     return pvalue
 
-def get_pvals_sub(sub, save=True):
+def fisher_sum(pvals_all_subs):
     
     """
-    Get p values for each subject (each permutation and each domain)
+    Compute Fisher sum of pvalues across subjects
     
     Inputs:
-    - sub : int, sub number
-    - save : bool, whether to save single subject's results; default=True
-
-    Outputs:
-    - res_sub_dict : dict, containing ROIs as keys and R2 results as values (2d array of shape = n_perms by n_doms)
-    - pvals_sub : dict, containing ROIs as keys and pvals as values (2d array of shape = n_perms by n_doms)
-
-    Calls:
-    - get_pvals()
-    """
-
-    # Load R2 results of single subject
-    res_sub = np.load('data/cca_results/sub-{}/CCA_res_sub-{}_Schaefer200.npz'.format(sub, sub), allow_pickle=True)['result_dict'].item()
+    - pvals_all_subs : array, 3d matrix of shape = n_perms by n_doms by n_subs, containing pvals of each subject, domain and perm
     
-    # Initialize dictionaries
-    pvals_sub = {}
-    res_sub_dict = {}
+    Outputs:
+    - pval : array, 2d matrix of shape = n_perms by n_doms, containing aggregated pvalues
+    - t : array, 2d matrix of shape = n_perms by n_doms, containing aggregated t statistic
+    """
+    
+    # Define number of tests, in this case = number of subjects
+    n_test = pvals_all_subs.shape[-1]
 
-    # Iterate over ROIs and get R2 results and calculate p-values
-    for roi in res_sub.keys():
-        res_roi = res_sub[roi][1,:,:]
-        pvals_sub[roi] = np.array([get_pvals(res_roi[:,d]) for d in range(res_roi.shape[-1])]).T
-        res_sub_dict[roi] = res_roi
+    # Calculate t and pval with Fisher's formula
+    t = -2 * (np.sum(np.log(pvals_all_subs), axis=2))
+    pval = 1-(chi2.cdf(t, 2*n_test))
 
-    # Save results
-    if save:
-        path = 'data/cca_results/sub-{}/'.format(sub)
-        if not os.path.exists(path):
-            os.makedirs(path)
-        
-        np.savez(path + 'CCA_stats_sub-{}'.format(sub), pvals_sub=pvals_sub, res_sub_dict=res_sub_dict)  
-
-    return res_sub_dict, pvals_sub
+    return pval, t
 
 def get_pvals_group(rois, pvals_subs, res_subs, n_perms, n_doms, save=True):
     
@@ -229,31 +272,22 @@ def get_pvals_group(rois, pvals_subs, res_subs, n_perms, n_doms, save=True):
 
     return results_group, pvals_group
 
-def fisher_sum(pvals_all_subs):
-    
-    """
-    Compute Fisher sum of pvalues across subjects
-    
-    Inputs:
-    - pvals_all_subs : dict, containing sub number as keys and dictionaries as values, containing ROIs as keys and pvals as values (2d array of shape = n_perms by n_doms)
-    
-    Outputs:
-    - pval : float
-    - t : float
-
-    """
-    
-    # Define number of tests, in this case = number of subjects
-    n_test = pvals_all_subs.shape[-1]
-
-    # Calculate t and pval with Fisher's formula
-    t = -2 * (np.sum(np.log(pvals_all_subs), axis=2))
-    pval = 1-(chi2.cdf(t, 2*n_test))
-
-    return pval, t
-
 def save_nifti(atlas, n_doms, results_group, pvals_group, path):
     
+    """
+    Create and save Nifti image of results
+    
+    Inputs:
+    - atlas : nii like object, Atlas in nifti
+    - n_doms : int, number of domains
+    - results_group : dict, containing ROIs as keys and mean R2 results of non permuted data as values (1d array of shape = n_doms)
+    - pvals_group : dict, containing ROIs as keys and pvals as values (2d array of shape = n_perms by n_doms)
+    - path : str, path where to save results
+
+    Outputs:
+    - image_final : array, 4d matrix of shape = x by y by z by n_doms*2, containing mean results for each domain and aggregated pvalues for each domain
+    """
+
     # Get atlas dimensions
     atlas_data = atlas.get_fdata()
     atlas_rois = np.unique(atlas_data).astype(int)
@@ -283,7 +317,7 @@ if __name__ == '__main__':
     
     print('Starting statistical analyses')
     
-    n_perms, n_doms, sub_list = 1000+1, 5, [7,8,9]
+    n_perms, n_doms, sub_list = 1000, 5, [7,8,9]
 
     # Load Atlas
     atlas = image.load_img('../../Atlases/Schaefer-200_7Networks_ICBM152_Allin.nii.gz')
