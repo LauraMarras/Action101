@@ -175,28 +175,37 @@ def get_pvals_sub(sub, save=True):
 def get_pvals_group(rois, pvals_subs, res_subs, n_perms, n_doms, save=True):
     
     """
-    Get p values for each subject (each permutation and each domain)
+    Get p values at group level (each permutation and each domain)
     
     Inputs:
-    - sub : int, sub number
-    - save : bool, whether to save single subject's results; default=True
+    - rois : list or array of ints or strings, list of ROIs (keys of single subject results)
+    - pvals_subs : dict, containing sub number as keys and dictionaries as values, containing ROIs as keys and pvals as values (2d array of shape = n_perms by n_doms)
+    - res_subs : dict, containing sub number as keys and dictionaries as values, containing ROIs as keys and R2 as values (2d array of shape = n_perms by n_doms)
+    - n_perms : int, number of permutations
+    - n_doms : int, number of domains
+    - save : bool, whether to save group results; default=True
 
     Outputs:
-    - res_sub_dict : dict, containing ROIs as keys and R2 results as values (2d array of shape = n_perms by n_doms)
-    - pvals_sub : dict, containing ROIs as keys and pvals as values (2d array of shape = n_perms by n_doms)
+    - results_group : dict, containing ROIs as keys and mean R2 results of non permuted data as values (1d array of shape = n_doms)
+    - pvals_group : dict, containing ROIs as keys and pvals as values (2d array of shape = n_perms by n_doms)
 
     Calls:
-    - get_pvals()
+    - fisher_sum()
+    - get_pval_pareto()
     """
-
+    
+    # Initialize dictionaries
     pvals_group = {}
     results_group = {}
     
+    # Iterate over ROIs
     for roi in rois:
-        # Aggregate results over subjects
+
+        # Initialize arrays for aggregated results
         pvals_aggregated = np.empty((n_perms, n_doms, len(pvals_subs.keys())))
         res_aggregated = np.empty((n_doms, len(pvals_subs.keys())))
-    
+
+        # Aggregate results over subjects
         for s, sub in enumerate(pvals_subs.keys()):
             pvals_aggregated[:,:,s] = pvals_subs[sub][roi]
             res_aggregated[:,s] = res_subs[sub][roi][0,:]
@@ -210,6 +219,7 @@ def get_pvals_group(rois, pvals_subs, res_subs, n_perms, n_doms, save=True):
         # Get non-parametric results on summed pvals (with pareto)
         pvals_group[roi] = np.array([get_pval_pareto((1-summed_pvals[:,d]), plot='{}_{}'.format(roi, d+1)) for d in range(n_doms)])
 
+    # Save results
     if save:
         path = 'data/cca_results/group/'
         if not os.path.exists(path):
@@ -220,9 +230,23 @@ def get_pvals_group(rois, pvals_subs, res_subs, n_perms, n_doms, save=True):
     return results_group, pvals_group
 
 def fisher_sum(pvals_all_subs):
+    
+    """
+    Compute Fisher sum of pvalues across subjects
+    
+    Inputs:
+    - pvals_all_subs : dict, containing sub number as keys and dictionaries as values, containing ROIs as keys and pvals as values (2d array of shape = n_perms by n_doms)
+    
+    Outputs:
+    - pval : float
+    - t : float
 
+    """
+    
+    # Define number of tests, in this case = number of subjects
     n_test = pvals_all_subs.shape[-1]
 
+    # Calculate t and pval with Fisher's formula
     t = -2 * (np.sum(np.log(pvals_all_subs), axis=2))
     pval = 1-(chi2.cdf(t, 2*n_test))
 
