@@ -214,7 +214,7 @@ def add_motion(data_run, dimensions, regressors_path, upscalefactor=1, seed=0, s
     
     # Save movemet offsets --> save non scaled
     if save:
-        folder_path = 'data/simulazione_results/sub-{}/motionreg/'.format(sub)
+        folder_path = '/home/laura.marras/Documents/Repositories/Action101/data/simulazione_results/sub-{}/motionreg/'.format(sub)
         if not os.path.exists(folder_path):
             os.makedirs(folder_path)
         

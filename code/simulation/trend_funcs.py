@@ -83,7 +83,7 @@ def segment(volume, n_tissues=4, use_threshold=False, plot=None, sub=0, referenc
 
     # Save
     if reference:
-        folder_path = 'data/simulazione_results/sub-{}/segmentation/'.format(sub)
+        folder_path = '/home/laura.marras/Documents/Repositories/Action101/data/simulazione_results/sub-{}/segmentation/'.format(sub)
         if not os.path.exists(folder_path):
             os.makedirs(folder_path)
 
@@ -167,7 +167,7 @@ def add_trend(data_run, volume, tissues_mask, scale_parameter=100, n_bins=1, see
 
     # Save polynomial coefficients as nifti file
     if reference:
-        folder_path = 'data/simulazione_results/sub-{}/trend/'.format(sub)
+        folder_path = '/home/laura.marras/Documents/Repositories/Action101/data/simulazione_results/sub-{}/trend/'.format(sub)
         if not os.path.exists(folder_path):
             os.makedirs(folder_path)
 

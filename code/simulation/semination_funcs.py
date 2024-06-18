@@ -237,7 +237,7 @@ def seminate_mask(task, ROI_mask, data_noise, r=0.5, betas=None, n_bins=0, step=
 
     # Save signal, betas and data_noise
     if reference:
-        folder_path = 'data/simulazione_results/sub-{}/semina/'.format(sub)
+        folder_path = '/home/laura.marras/Documents/Repositories/Action101/data/simulazione_results/sub-{}/semina/'.format(sub)
         if not os.path.exists(folder_path):
             os.makedirs(folder_path)
 

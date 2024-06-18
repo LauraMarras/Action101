@@ -109,7 +109,7 @@ def add_noise(data_signal, noise_level=4, TR=2, seed=0, sub=0, reference=None, c
 
     # Save noise
     if reference:
-        folder_path = 'data/simulazione_results/sub-{}/noise/'.format(sub)
+        folder_path = '/home/laura.marras/Documents/Repositories/Action101/data/simulazione_results/sub-{}/noise/'.format(sub)
         if not os.path.exists(folder_path):
             os.makedirs(folder_path)
 

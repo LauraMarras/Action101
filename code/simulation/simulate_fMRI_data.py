@@ -28,11 +28,11 @@ if __name__ == '__main__':
 
     # Define motion parameters
     movement_upscale = 1
-    regressors_path = 'data/simulazione_datasets/motionreg/'
+    regressors_path = '/home/laura.marras/Documents/Repositories/Action101/data/simulazione_datasets/motionreg'
     
     # Define task parameters
     domain = 'agent_objective' # In this case we seminate the same model in all subjects
-    task_path = 'data/models/domains/group_us_conv_{}.csv'.format(domain)
+    task_path = '/home/laura.marras/Documents/Repositories/Action101/data/models/domains/group_us_conv_{}.csv'.format(domain)
     run_dur_sec = [536,450,640,650,472,480] # duration of each run in seconds
     run_dur_TR = (np.array(run_dur_sec)/TR).astype(int) # duration of each run in TRs
     run_cuts = np.array(list(zip((np.cumsum(run_dur_TR) - run_dur_TR), np.cumsum(run_dur_TR))))
@@ -49,7 +49,7 @@ if __name__ == '__main__':
         motion_params = {'movement_upscale': movement_upscale, 'regressors_path': regressors_path}
 
         # Print output to txt file
-        logpath = 'data/simulazione_results/sub-{}/logs/'.format(str(sub)+'__debug')
+        logpath = '/home/laura.marras/Documents/Repositories/Action101/data/simulazione_results/sub-{}/logs/'.format(str(sub)+'__debug')
         if not os.path.exists(logpath):
             os.makedirs(logpath)
         

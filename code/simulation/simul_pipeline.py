@@ -54,10 +54,10 @@ def simulate_subject(sub, fmri_params, task_params, motion_params, seed_schema, 
     """
 
     # Load fMRI template and semination mask (voxels where to seminate task signal)
-    template_nii = image.load_img('data/simulazione_datasets/sub-{}/func/template.nii.gz'.format(sub))
+    template_nii = image.load_img('/home/laura.marras/Documents/Repositories/Action101/data/simulazione_datasets/sub-{}/func/template.nii.gz'.format(sub))
     template = template_nii.get_fdata()
     template_volume = template[:,:,:,0] # Get single volume
-    semination_mask = image.load_img('data/simulazione_datasets/sub-{}/anat/{}'.format(sub, fmri_params['semination_mask'])).get_fdata()
+    semination_mask = image.load_img('/home/laura.marras/Documents/Repositories/Action101/data/simulazione_datasets/sub-{}/anat/{}'.format(sub, fmri_params['semination_mask'])).get_fdata()
 
     # Get n_voxels and slices, mean and std
     voxel_dims_mm = tuple(template_nii.header._structarr['pixdim'][1:4])
@@ -109,7 +109,7 @@ def simulate_subject(sub, fmri_params, task_params, motion_params, seed_schema, 
             
         # Save data
         if options['save']:
-            folder_path = 'data/simulazione_results/sub-{}/fmri/'.format(sub)
+            folder_path = '/home/laura.marras/Documents/Repositories/Action101/data/simulazione_results/sub-{}/fmri/'.format(sub)
             if not os.path.exists(folder_path):
                 os.makedirs(folder_path)
 
