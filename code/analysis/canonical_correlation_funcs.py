@@ -235,7 +235,7 @@ def run_cca_all_subjects(sub_list, domains, atlas_file, n_perms=1000, chunk_size
     for sub in sub_list:
         
         # Print output to txt file
-        log_path = 'data/cca_results/sub-{}/logs/'.format(sub)
+        log_path = '/home/laura.marras/Documents/Repositories/Action101/data/cca_results/sub-{}/logs/'.format(sub)
         if not os.path.exists(log_path):
             os.makedirs(log_path)
         
@@ -249,8 +249,8 @@ def run_cca_all_subjects(sub_list, domains, atlas_file, n_perms=1000, chunk_size
         print('\n- Atlas: {}'.format('Schaefer200' if atlas_file == 'atlas_2orig' else 'Schaefer1000'))
 
         # Load data
-        data = image.load_img('data/simulazione_preprocessed/sub-{}/func/cleaned.nii.gz'.format(sub)).get_fdata()
-        atlas = image.load_img('data/simulazione_datasets/sub-{}/anat/{}.nii.gz'.format(sub, atlas_file)).get_fdata()
+        data = image.load_img('/home/laura.marras/Documents/Repositories/Action101/data/simulazione_preprocessed/sub-{}/func/cleaned.nii.gz'.format(sub)).get_fdata()
+        atlas = image.load_img('/home/laura.marras/Documents/Repositories/Action101/data/simulazione_datasets/sub-{}/anat/{}.nii.gz'.format(sub, atlas_file)).get_fdata()
         
         # Extract rois
         data_rois, n_rois, n_voxels = extract_roi(data, atlas)
@@ -267,7 +267,7 @@ def run_cca_all_subjects(sub_list, domains, atlas_file, n_perms=1000, chunk_size
         
         # Save
         if save:
-            folder_path = 'data/cca_results/sub-{}/'.format(sub)
+            folder_path = '/home/laura.marras/Documents/Repositories/Action101/data/cca_results/sub-{}/'.format(sub)
             if not os.path.exists(folder_path):
                 os.makedirs(folder_path)
 

@@ -64,7 +64,7 @@ def plot_pareto(right_tail, kHat, loc, sigmaHat, q, critical_value, pname):
     fig.suptitle('ROI {} domain {}'.format(roi, dom))
 
     # Save figure
-    figpath = 'data/cca_results/group/pareto/'
+    figpath = '/home/laura.marras/Documents/Repositories/Action101/data/cca_results/group/pareto/'
     if not os.path.exists(figpath):
         os.makedirs(figpath)
 
@@ -108,7 +108,7 @@ def get_pvals_sub(sub, save=True):
     """
 
     # Load R2 results of single subject
-    res_sub = np.load('data/cca_results/sub-{}/CCA_res_sub-{}_Schaefer200.npz'.format(sub, sub), allow_pickle=True)['result_dict'].item()
+    res_sub = np.load('/home/laura.marras/Documents/Repositories/Action101/data/cca_results/sub-{}/CCA_res_sub-{}_Schaefer200.npz'.format(sub, sub), allow_pickle=True)['result_dict'].item()
     
     # Initialize dictionaries
     pvals_sub = {}
@@ -122,7 +122,7 @@ def get_pvals_sub(sub, save=True):
 
     # Save results
     if save:
-        path = 'data/cca_results/sub-{}/'.format(sub)
+        path = '/home/laura.marras/Documents/Repositories/Action101/data/cca_results/sub-{}/'.format(sub)
         if not os.path.exists(path):
             os.makedirs(path)
         
@@ -264,7 +264,7 @@ def get_pvals_group(rois, pvals_subs, res_subs, n_perms, n_doms, save=True):
 
     # Save results
     if save:
-        path = 'data/cca_results/group/'
+        path = '/home/laura.marras/Documents/Repositories/Action101/data/cca_results/group/'
         if not os.path.exists(path):
             os.makedirs(path)
         
@@ -320,7 +320,7 @@ if __name__ == '__main__':
     n_perms, n_doms, sub_list = 1000, 5, [7,8,9]
 
     # Load Atlas
-    atlas = image.load_img('../../Atlases/Schaefer-200_7Networks_ICBM152_Allin.nii.gz')
+    atlas = image.load_img('/home/laura.marras/Documents/Atlases/Schaefer-200_7Networks_ICBM152_Allin.nii.gz')
     atlas_rois = np.unique(atlas.get_fdata()).astype(int)
     atlas_rois = np.delete(atlas_rois, np.argwhere(atlas_rois==0))
     
@@ -334,7 +334,7 @@ if __name__ == '__main__':
     results_group, pvals_group = get_pvals_group(atlas_rois, pvals_subs, results_subs, n_perms+1, n_doms, save=True)
 
     # Save as nifti
-    folder_path = 'data/cca_results/group/'
+    folder_path = '/home/laura.marras/Documents/Repositories/Action101/data/cca_results/group/'
     image_final = save_nifti(atlas, n_doms, results_group, pvals_group, folder_path)
 
     print('Finished statistical analyses')

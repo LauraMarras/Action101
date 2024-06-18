@@ -29,7 +29,7 @@ if __name__ == '__main__':
     
     # Load task models
     domains_list = ['space_movement', 'agent_objective', 'social_connectivity', 'emotion_expression', 'linguistic_predictiveness']
-    domains = {d: np.loadtxt('data/models/domains/group_ds_conv_{}.csv'.format(d), delimiter=',', skiprows=1)[:, 1:] for d in domains_list}
+    domains = {d: np.loadtxt('/home/laura.marras/Documents/Repositories/Action101/data/models/domains/group_ds_conv_{}.csv'.format(d), delimiter=',', skiprows=1)[:, 1:] for d in domains_list}
     n_doms = len(domains.keys())
 
     # Run CCA for all subjects
@@ -40,7 +40,7 @@ if __name__ == '__main__':
     print('Starting statistical analyses')
     
     # Load Atlas
-    atlas = image.load_img('../../Atlases/Schaefer-200_7Networks_ICBM152_Allin.nii.gz')
+    atlas = image.load_img('/home/laura.marras/Documents/Atlases/Schaefer-200_7Networks_ICBM152_Allin.nii.gz')
     atlas_rois = np.unique(atlas.get_fdata()).astype(int)
     atlas_rois = np.delete(atlas_rois, np.argwhere(atlas_rois==0))
     
@@ -54,7 +54,7 @@ if __name__ == '__main__':
     results_group, pvals_group = get_pvals_group(atlas_rois, pvals_subs, results_subs, n_perms+1, n_doms, save=True)
 
     # Save as nifti
-    folder_path = 'data/cca_results/group/debug/'
+    folder_path = '/home/laura.marras/Documents/Repositories/Action101/data/cca_results/group/debug/'
     image_final = save_nifti(atlas, n_doms, results_group, pvals_group, folder_path)
 
     print('Finished statistical analyses')
