@@ -15,13 +15,13 @@ if __name__ == '__main__':
     print('Starting CCA')
 
     # Set parameters
-    sub_list = np.array([12]) # np.array([7,8,9])
+    sub_list = np.array([13]) # np.array([7,8,9])
     n_subs = len(sub_list)
     save = True
 
     ## CCA
     atlas_file = 'atlas_2orig' # 'atlas1000_2orig.nii.gz'
-    pooln = 10
+    pooln = 20
 
     ## Permutation schema
     n_perms = 1000
@@ -58,10 +58,11 @@ if __name__ == '__main__':
 
     # Rebuild pvals_dictionary
     pvals_fdr_dict = {roi: pvals_array[r*n_doms:r*n_doms+n_doms] for r, roi in enumerate(atlas_rois)}
+    results_sub_dict = {roi: results_subs[sub][roi][0] for roi in atlas_rois}
 
     # Save as nifti
     folder_path = '/home/laura.marras/Documents/Repositories/Action101/data/cca_results/sub-{}/'.format(sub)
-    image_final = save_nifti(atlas, n_doms, results_subs[sub], pvals_fdr_dict, folder_path)
+    image_final = save_nifti(atlas, n_doms, results_sub_dict, pvals_fdr_dict, folder_path)
 
 
     if len(sub_list)>1:
