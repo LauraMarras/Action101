@@ -102,7 +102,6 @@ def run_cca_single_roi(roi, perm_schema, domains):
     
     # Initialize results matrix
     results = np.full((2, n_perms, n_domains), np.nan)
-    R_list = []
     
     # Run canonical correlation analysis for each permutation 
     for perm in range(n_perms):
@@ -115,12 +114,11 @@ def run_cca_single_roi(roi, perm_schema, domains):
         for d, domain in enumerate(domains.values()):
             X = domain
             
-            r2, r2adj, _, _, R, _, _ = canonical_correlation(X, Y)
+            r2, r2adj, _, _, _, _, _ = canonical_correlation(X, Y)
             results[0, perm, d] = r2
             results[1, perm, d] = r2adj
-            R_list.append(R)
 
-    return results, R_list
+    return results
 
 def extract_roi(data, atlas):
     
@@ -184,7 +182,6 @@ def run_cca_all_rois(data_rois, domains, perm_schema, pooln=20):
     # Initialize results matrix and dictionary
     result_matrix = np.empty((n_rois, 2, n_perms, len(domains)))
     result_dict = {}
-    pearson_dict = {}
 
     # Set pool
     results_pool = []
@@ -200,11 +197,10 @@ def run_cca_all_rois(data_rois, domains, perm_schema, pooln=20):
     for result_pool in results_pool:
         njob = result_pool[1]._job
         roi_n = result_pool[0]
-        result_matrix[njob, :, :, :] = result_pool[1].get()[0]
-        result_dict[roi_n] = result_pool[1].get()[0]
-        pearson_dict[roi_n] = result_pool[1].get()[1]
+        result_matrix[njob, :, :, :] = result_pool[1].get()
+        result_dict[roi_n] = result_pool[1].get()
 
-    return result_matrix, result_dict, pearson_dict
+    return result_matrix, result_dict
 
 def run_cca_all_subjects(sub_list, domains, atlas_file, n_perms=1000, chunk_size=15, seed=0, pooln=20, save=True):
     
@@ -267,7 +263,7 @@ def run_cca_all_subjects(sub_list, domains, atlas_file, n_perms=1000, chunk_size
         perm_schema = permutation_schema(n_tpoints, n_perms=n_perms, chunk_size=chunk_size)
 
         # Run cca for each roi
-        result_matrix, result_dict, pearson_dict = run_cca_all_rois(data_rois, domains, perm_schema, pooln=pooln)
+        result_matrix, result_dict = run_cca_all_rois(data_rois, domains, perm_schema, pooln=pooln)
         
         # Save
         if save:
@@ -275,7 +271,7 @@ def run_cca_all_subjects(sub_list, domains, atlas_file, n_perms=1000, chunk_size
             if not os.path.exists(folder_path):
                 os.makedirs(folder_path)
 
-            np.savez('{}CCA_res_sub-{}_{}'.format(folder_path, sub, 'Schaefer200' if atlas_file == 'atlas_2orig' else 'Schaefer1000'), result_matrix=result_matrix, result_dict=result_dict, pearson_dict=pearson_dict)
+            np.savez('{}CCA_res_sub-{}_{}'.format(folder_path, sub, 'Schaefer200' if atlas_file == 'atlas_2orig' else 'Schaefer1000'), result_matrix=result_matrix, result_dict=result_dict)
         
         # Close textfile
         logfile.close()
