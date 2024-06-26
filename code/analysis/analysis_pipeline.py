@@ -15,13 +15,14 @@ if __name__ == '__main__':
     print('Starting CCA')
 
     # Set parameters
-    sub_list = np.array([12]) # np.array([7,8,9])
+    sub_list = np.array([14, 15, 16]) #, 17, 18, 19, 22, 32])
     n_subs = len(sub_list)
     save = True
+    run_fdr = False
 
     ## CCA
     atlas_file = 'atlas_2orig' # 'atlas1000_2orig.nii.gz'
-    pooln = 10
+    pooln = 20
 
     ## Permutation schema
     n_perms = 1000
@@ -52,19 +53,21 @@ if __name__ == '__main__':
     for s, sub in enumerate(sub_list):
         results_subs[sub], pvals_subs[sub] = get_pvals_sub(sub, save=True)
 
-    # FDR correction
-    pvals_array = np.concatenate([v[0,:] for k,v in sorted(pvals_subs[sub].items())], 0)
-    pvals_fdr = fdr(pvals_array)
+    
+    if run_fdr:
+        # FDR correction
+        pvals_array = np.concatenate([v[0,:] for k,v in sorted(pvals_subs[sub].items())], 0)
+        pvals_fdr = fdr(pvals_array)
 
-    # Rebuild pvals_dictionary
-    pvals_fdr_dict = {roi: pvals_array[r*n_doms:r*n_doms+n_doms] for r, roi in enumerate(atlas_rois)}
+        # Rebuild pvals_dictionary
+        pvals_fdr_dict = {roi: pvals_array[r*n_doms:r*n_doms+n_doms] for r, roi in enumerate(atlas_rois)}
 
-    # Save as nifti
-    folder_path = '/home/laura.marras/Documents/Repositories/Action101/data/cca_results/sub-{}/'.format(sub)
-    image_final = save_nifti(atlas, n_doms, results_subs[sub], pvals_fdr_dict, folder_path)
+        # Save as nifti
+        folder_path = '/home/laura.marras/Documents/Repositories/Action101/data/cca_results/sub-{}/'.format(sub)
+        image_final = save_nifti(atlas, n_doms, results_subs[sub], pvals_fdr_dict, folder_path)
 
 
-    if len(sub_list)>1:
+    if n_subs >= 10:
         # Get group results
         results_group, pvals_group = get_pvals_group(atlas_rois, pvals_subs, results_subs, n_perms+1, n_doms, save=True)
 
