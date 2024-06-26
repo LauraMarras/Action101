@@ -249,8 +249,8 @@ def run_cca_all_subjects(sub_list, domains, atlas_file, n_perms=1000, chunk_size
         print('\n- Atlas: {}'.format('Schaefer200' if atlas_file == 'atlas_2orig' else 'Schaefer1000'))
 
         # Load data
-        data = image.load_img('/home/laura.marras/Documents/Repositories/Action101/data/simulazione_preprocessed/sub-{}/func/cleaned.nii.gz'.format(sub)).get_fdata()
-        atlas = image.load_img('/home/laura.marras/Documents/Repositories/Action101/data/simulazione_datasets/sub-{}/anat/{}.nii.gz'.format(sub, atlas_file)).get_fdata()
+        data = image.load_img('/data1/ISC_101_setti/dati_fMRI_TORINO/sub-0{}/ses-AV/func/allruns_cleaned_sm6_SG.nii.gz'.format(sub)).get_fdata()
+        atlas = image.load_img('/data1/Action_teresi/CCA/atlas/sub-{}_atlas_2orig.nii.gz'.format(sub)).get_fdata()
         
         # Extract rois
         data_rois, n_rois, n_voxels = extract_roi(data, atlas)
