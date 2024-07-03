@@ -5,6 +5,7 @@ os.environ['OMP_NUM_THREADS'] = '1'
 os.environ['BLIS_NUM_THREADS'] = '1'
 
 from sklearn.cross_decomposition import CCA
+from sklearn.decomposition import PCA
 import numpy as np
 import multiprocessing as mp
 from utils.exectime_decor import timeit
@@ -13,6 +14,26 @@ import sys
 from datetime import datetime
 
 from permutation_schema_func import permutation_schema
+
+def pca_single_roi(roi, n_comps=None):
+    
+    """
+    Perform PCA of a single ROI
+
+    Input:
+    - roi : array, 2d matrix of shape = n_tpoints by n_voxels containing fMRI data 
+    - n_comps : number of components to keep, if None, keep all components; default = None
+
+    Output:
+    - roi_pca : array, 2d matrix of shape = n_tpoints by n_components containing fMRI data projected on the components
+    - explained_var : array, cumulative sum of percentage of explained variance by each component
+    """
+
+    pca = PCA(n_components=n_comps)
+    roi_pca = pca.fit_transform(roi)
+    explained_var = np.cumsum(pca.explained_variance_ratio_)
+    
+    return roi_pca, explained_var
 
 def canonical_correlation(X,Y, center=True):
     
@@ -156,7 +177,7 @@ def extract_roi(data, atlas):
     return data_rois, n_rois, n_voxels_rois
 
 @timeit
-def run_cca_all_rois(data_rois, domains, perm_schema, pooln=20):
+def run_cca_all_rois(data_rois, domains, perm_schema, minvox, pooln=20):
     
     """
     Run canonical correlation for all ROIs using parallelization
@@ -165,6 +186,7 @@ def run_cca_all_rois(data_rois, domains, perm_schema, pooln=20):
     - data_rois : dict, including for each ROI within atlas, 2d (or 1d) matrix of shape = voxels (by time) containing fMRI signal of each voxel within ROI
     - domains : dict, including domains as keys and 2d matrix of shape = n_tpoints by n_columns as values
     - perm_schema : array, 2d matrix of shape = n_tpoints, n_perms; first row contains unshuffled indices --> contains indices for each permutation
+    - minvox : int, number of components to keep in PCA, in this case it will be the number of voxels of the smallest ROI (provided that it is higher than the maximum number of predictors of the task domains)
     - pooln : int, number of parallelization processes; default = 20
     
     Outputs:
@@ -173,6 +195,7 @@ def run_cca_all_rois(data_rois, domains, perm_schema, pooln=20):
     
     Calls:
     - run_cca_single_roi()
+    - pca_single_roi()
     """
 
     # Define number of ROIs and of permutations
@@ -180,17 +203,28 @@ def run_cca_all_rois(data_rois, domains, perm_schema, pooln=20):
     n_perms = perm_schema.shape[1]
     
     # Initialize results matrix and dictionary
-    result_matrix = np.empty((n_rois, 2, n_perms, len(domains)))
+    result_matrix = np.full((n_rois, 2, n_perms, len(domains)), np.nan)
     result_dict = {}
+    pca_dict = {}
 
     # Set pool
     results_pool = []
     pool = mp.Pool(pooln)
 
-    # Run canoncorr for each ROI with parallelization and store results
+    # Iterate over ROIs
     for r, roi in data_rois.items():
-        result_pool = pool.apply_async(run_cca_single_roi, args=(roi, perm_schema, domains))
-        results_pool.append((r, result_pool))
+        
+        # PCA
+        if roi.shape[1] >= minvox:
+            roi_pca, pca_dict[r] = pca_single_roi(roi, n_comps=minvox)
+
+            # Run canoncorr for each ROI with parallelization and store results
+            result_pool = pool.apply_async(run_cca_single_roi, args=(roi_pca, perm_schema, domains))
+            results_pool.append((r, result_pool))
+
+        else:
+            print('- ROI {} voxels are {}, less than the max number of predictors!! This ROI will be discarded'.format(r, roi.shape[1]))
+
     pool.close()
     
     # Unpack results
@@ -200,9 +234,9 @@ def run_cca_all_rois(data_rois, domains, perm_schema, pooln=20):
         result_matrix[njob, :, :, :] = result_pool[1].get()
         result_dict[roi_n] = result_pool[1].get()
 
-    return result_matrix, result_dict
+    return result_matrix, result_dict, pca_dict
 
-def run_cca_all_subjects(sub_list, domains, atlas_file, n_perms=1000, chunk_size=15, seed=0, pooln=20, save=True):
+def run_cca_all_subjects(sub_list, domains, atlas_file, n_perms=1000, chunk_size=15, seed=0, pooln=20, save=True, suffix=''):
     
     """
     Run canonical correlation for all subjects
@@ -216,6 +250,7 @@ def run_cca_all_subjects(sub_list, domains, atlas_file, n_perms=1000, chunk_size
     - seed: int, seed for the random permutation; default = 0
     - pooln : int, number of parallelization processes; default = 20
     - save : bool, whether to save results as npy files; default = True
+    - suffix : str, foldername suffix to add to saving path; default = ''
     
     Saves:
     For each subject
@@ -235,7 +270,7 @@ def run_cca_all_subjects(sub_list, domains, atlas_file, n_perms=1000, chunk_size
     for sub in sub_list:
         
         # Print output to txt file
-        log_path = '/home/laura.marras/Documents/Repositories/Action101/data/cca_results/sub-{}/logs/'.format(sub)
+        log_path = '/home/laura.marras/Documents/Repositories/Action101/data/cca_results/sub-{}{}/logs/'.format(sub, suffix)
         if not os.path.exists(log_path):
             os.makedirs(log_path)
         
@@ -254,27 +289,109 @@ def run_cca_all_subjects(sub_list, domains, atlas_file, n_perms=1000, chunk_size
         
         # Extract rois
         data_rois, n_rois, n_voxels = extract_roi(data, atlas)
+        minvoxs = np.sort(list(n_voxels.values()))
+        minvox = minvoxs[np.argwhere(minvoxs >= np.max([v.shape[1] for v in domains.values()]))[0][0]]
         
         print('- n_rois: {}'.format(n_rois))
         print('- n_voxels between {} and {}'.format(np.min(list(n_voxels.values())), np.max(list(n_voxels.values()))))
+        print('- minvox used for PCA = {}'.format(minvox))
 
         # Generate permutation schema
         n_tpoints = data.shape[-1]
         perm_schema = permutation_schema(n_tpoints, n_perms=n_perms, chunk_size=chunk_size)
 
         # Run cca for each roi
-        result_matrix, result_dict = run_cca_all_rois(data_rois, domains, perm_schema, pooln=pooln)
+        result_matrix, result_dict, pca_dict = run_cca_all_rois(data_rois, domains, perm_schema, minvox, pooln=pooln)
         
         # Save
         if save:
-            folder_path = '/home/laura.marras/Documents/Repositories/Action101/data/cca_results/sub-{}/'.format(sub)
+            folder_path = '/home/laura.marras/Documents/Repositories/Action101/data/cca_results/sub-{}{}/'.format(sub, suffix)
             if not os.path.exists(folder_path):
                 os.makedirs(folder_path)
 
-            np.savez('{}CCA_res_sub-{}_{}'.format(folder_path, sub, 'Schaefer200' if atlas_file == 'atlas_2orig' else 'Schaefer1000'), result_matrix=result_matrix, result_dict=result_dict)
+            np.savez('{}CCA_res_sub-{}_{}'.format(folder_path, sub, 'Schaefer200' if atlas_file == 'atlas_2orig' else 'Schaefer1000'), result_matrix=result_matrix, result_dict=result_dict, pca_dict=pca_dict)
         
         # Close textfile
         logfile.close()
     
     # Reset printing settings
     sys.stdout = orig_stdout
+
+def pca_all_rois(sub, domains, critical_v):
+    
+    """
+
+    """
+
+    # Load data
+    data = image.load_img('/data1/ISC_101_setti/dati_fMRI_TORINO/sub-0{}/ses-AV/func/allruns_cleaned_sm6_SG.nii.gz'.format(sub)).get_fdata()
+    atlas = image.load_img('/data1/Action_teresi/CCA/atlas/sub-{}_atlas100_2orig.nii.gz'.format(sub)).get_fdata()
+    labels = np.loadtxt('/data1/Action_teresi/CCA/atlas/Schaefer_7N_labels.txt', dtype=str)
+
+    # Extract rois
+    data_rois, n_rois, n_voxels = extract_roi(data, atlas)
+    minvoxs = np.sort(list(n_voxels.values()))
+    maxpreds = np.max([v.shape[1] for v in domains.values()])
+    minvox = minvoxs[np.argwhere(minvoxs >= maxpreds)[0][0]]
+
+    print('### Subject {}'.format(sub))
+    print('- n_rois: {}'.format(n_rois))
+    print('- n_voxels between {} and {}'.format(np.min(list(n_voxels.values())), np.max(list(n_voxels.values()))))
+    print('- n_components that would be used for PCA = {}'.format(minvox))
+
+    # Initialize results dict
+    explained_variance = {}
+    
+    # Perform PCA for each ROI
+    for r, roi in data_rois.items():
+        _, explained_variance[r] = pca_single_roi(roi, n_comps=None)
+
+    # Test various critical values of explained variance
+    for critical in critical_v:
+        critical_c = {}
+        
+        for r in data_rois.keys():
+            critical_c[r] = np.where(explained_variance[r] >= critical)[0][0]
+
+        max_nc = np.max(np.array(list(critical_c.values())))
+        n_rois_below = np.sum(list(n_voxels.values())<max_nc)
+        rois_below = np.array(list(data_rois.keys()))[list(n_voxels.values())<max_nc]
+        rois_to_exclude = labels[np.where(list(n_voxels.values())<max_nc)[0]]
+        
+
+        print('- n_components to reach at least {} of explained variance in all ROIs: {}'.format(critical, max_nc))
+        print('- n_rois that would be excluded due to n_voxels below n_components: {}'.format(n_rois_below))
+        print('ROIs to be escluded: {}'.format(rois_to_exclude))
+
+    return explained_variance, critical_c, max_nc, n_rois_below, rois_below, rois_to_exclude
+
+
+if __name__ == '__main__': 
+
+    # Set parameters
+    sub_list = np.array([12, 13, 14, 15, 16, 17, 18, 19, 22, 32])
+
+    # Load task models
+    domains_list = ['space_movement', 'agent_objective', 'social_connectivity', 'emotion_expression', 'linguistic_predictiveness']
+    domains = {d: np.loadtxt('/home/laura.marras/Documents/Repositories/Action101/data/models/domains/group_ds_conv_{}.csv'.format(d), delimiter=',', skiprows=1)[:, 1:] for d in domains_list}
+    n_doms = len(domains.keys())
+
+    n_rois_below = np.zeros(len(sub_list))
+    max_nc = np.zeros(len(sub_list))
+    rois_to_exclude = {}
+    rois_below = {}
+    
+    # Test PCA impact for all subs
+    for s, sub in enumerate(sub_list): 
+        explained_v, critical_c, max_nc[s], n_rois_below[s], rois_below[sub], rois_to_exclude[sub] = pca_all_rois(sub, domains, critical_v=[0.9])#, 0.85])
+
+
+    roistoex = []
+    for x in list(rois_to_exclude.values()):
+        for c in x:
+            roistoex.append(c)
+
+    rois_to_ex_dict = {x: roistoex.count(x) for x in np.unique(roistoex)}
+
+
+    print('d')
