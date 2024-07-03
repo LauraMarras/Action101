@@ -317,7 +317,7 @@ def run_cca_all_subjects(sub_list, domains, atlas_file, n_perms=1000, chunk_size
     # Reset printing settings
     sys.stdout = orig_stdout
 
-def pca_all_rois(sub, domains, critical_v):
+def pca_all_rois(sub, domains, threshold, critical_v):
     
     """
 
@@ -342,31 +342,60 @@ def pca_all_rois(sub, domains, critical_v):
     # Initialize results dict
     explained_variance = {}
     
-    # Perform PCA for each ROI
-    for r, roi in data_rois.items():
-        _, explained_variance[r] = pca_single_roi(roi, n_comps=None)
+    if threshold == 'minvariance':
+        # Perform PCA for each ROI
+        for r, roi in data_rois.items():
+            _, explained_variance[r] = pca_single_roi(roi, n_comps=None)
 
-    # Test various critical values of explained variance
-    for critical in critical_v:
-        critical_c = {}
+        # Test various critical values of explained variance
+        for critical in critical_v:
+            critical_c = {}
+            
+            for r in data_rois.keys():
+                critical_c[r] = np.where(explained_variance[r] >= critical)[0][0]
+
+            max_nc = np.max(np.array(list(critical_c.values())))
+            n_rois_below = np.sum(list(n_voxels.values())<max_nc)
+            rois_below = np.array(list(data_rois.keys()))[list(n_voxels.values())<max_nc]
+            rois_to_exclude = labels[np.where(list(n_voxels.values())<max_nc)[0]]
+            
+
+            print('- n_components to reach at least {} of explained variance in all ROIs: {}'.format(critical, max_nc))
+            print('- n_rois that would be excluded due to n_voxels below n_components: {}'.format(n_rois_below))
+            print('ROIs to be escluded: {}'.format(rois_to_exclude))
         
-        for r in data_rois.keys():
-            critical_c[r] = np.where(explained_variance[r] >= critical)[0][0]
+        return explained_variance, critical_c, max_nc, n_rois_below, rois_below, rois_to_exclude
 
-        max_nc = np.max(np.array(list(critical_c.values())))
-        n_rois_below = np.sum(list(n_voxels.values())<max_nc)
-        rois_below = np.array(list(data_rois.keys()))[list(n_voxels.values())<max_nc]
-        rois_to_exclude = labels[np.where(list(n_voxels.values())<max_nc)[0]]
+    elif threshold == 'components':
         
+        # Perform PCA for each ROI
+        for r, roi in data_rois.items():
+            _, exvariance = pca_single_roi(roi, n_comps=minvox)
+            explained_variance[r] = exvariance[-1]
+        
+        print('- explained variance within {} and {}'.format(np.min(list(explained_variance.values())), np.max(list(explained_variance.values()))))
 
-        print('- n_components to reach at least {} of explained variance in all ROIs: {}'.format(critical, max_nc))
-        print('- n_rois that would be excluded due to n_voxels below n_components: {}'.format(n_rois_below))
-        print('ROIs to be escluded: {}'.format(rois_to_exclude))
-
-    return explained_variance, critical_c, max_nc, n_rois_below, rois_below, rois_to_exclude
-
+        for critical in critical_v:
+            n_rois_below = np.sum(np.array(list(explained_variance.values()))<critical)
+            rois_below = np.array(list(data_rois.keys()))[np.array(list(explained_variance.values()))<critical]
+            rois_to_exclude = labels[np.where(np.array(list(explained_variance.values()))<critical)[0]]
+            print('- n_rois that would have explained variance lower than {}: {}'.format(critical, n_rois_below))
+            print('ROIs with explained variance lower than {}: {}'.format(critical, rois_to_exclude))
+        
+        return explained_variance, n_rois_below, rois_below, rois_to_exclude
+      
+    
+    
 
 if __name__ == '__main__': 
+
+    # Print output to txt file
+    log_path = '/home/laura.marras/Documents/Repositories/Action101/data/cca_results/logs/'
+    if not os.path.exists(log_path):
+        os.makedirs(log_path)
+    
+    logfile = open('{}log_pca_atlas{}.txt'.format(log_path, '100'), 'w')
+    sys.stdout = logfile
 
     # Set parameters
     sub_list = np.array([12, 13, 14, 15, 16, 17, 18, 19, 22, 32])
@@ -383,7 +412,8 @@ if __name__ == '__main__':
     
     # Test PCA impact for all subs
     for s, sub in enumerate(sub_list): 
-        explained_v, critical_c, max_nc[s], n_rois_below[s], rois_below[sub], rois_to_exclude[sub] = pca_all_rois(sub, domains, critical_v=[0.9])#, 0.85])
+        #explained_v, n_rois_below[s], rois_below[sub], rois_to_exclude[sub] = pca_all_rois(sub, domains, threshold='components', critical_v=[0.9])#, 0.85])
+        explained_v, critical_c, max_nc[s], n_rois_below[s], rois_below[sub], rois_to_exclude[sub] = pca_all_rois(sub, domains, threshold='minvariance', critical_v=[0.9])#, 0.85])
 
 
     roistoex = []
@@ -393,5 +423,5 @@ if __name__ == '__main__':
 
     rois_to_ex_dict = {x: roistoex.count(x) for x in np.unique(roistoex)}
 
-
-    print('d')
+    # Close textfile
+    logfile.close()
