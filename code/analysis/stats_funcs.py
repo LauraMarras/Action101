@@ -90,7 +90,7 @@ def get_pvals(results):
 
     return pvals
 
-def get_pvals_sub(sub, save=True):
+def get_pvals_sub(sub, save=True, suffix=''):
     
     """
     Get p values for each subject (each permutation and each domain)
@@ -98,6 +98,7 @@ def get_pvals_sub(sub, save=True):
     Inputs:
     - sub : int, sub number
     - save : bool, whether to save single subject's results; default=True
+    - suffix : str, default=''
 
     Outputs:
     - res_sub_dict : dict, containing ROIs as keys and R2 results as values (2d array of shape = n_perms by n_doms)
@@ -108,7 +109,7 @@ def get_pvals_sub(sub, save=True):
     """
 
     # Load R2 results of single subject
-    res_sub = np.load('/home/laura.marras/Documents/Repositories/Action101/data/cca_results/sub-{}/CCA_res_sub-{}_Schaefer200.npz'.format(sub, sub), allow_pickle=True)['result_dict'].item()
+    res_sub = np.load('/home/laura.marras/Documents/Repositories/Action101/data/cca_results/sub-{}{}/CCA_res_sub-{}_Schaefer200.npz'.format(sub, suffix, sub), allow_pickle=True)['result_dict'].item()
     
     # Initialize dictionaries
     pvals_sub = {}
@@ -122,7 +123,7 @@ def get_pvals_sub(sub, save=True):
 
     # Save results
     if save:
-        path = '/home/laura.marras/Documents/Repositories/Action101/data/cca_results/sub-{}/'.format(sub)
+        path = '/home/laura.marras/Documents/Repositories/Action101/data/cca_results/sub-{}{}/'.format(sub, suffix)
         if not os.path.exists(path):
             os.makedirs(path)
         
