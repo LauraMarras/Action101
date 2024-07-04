@@ -12,6 +12,7 @@ from utils.exectime_decor import timeit
 from nilearn import image
 import sys
 from datetime import datetime
+from scipy.stats import zscore
 
 from permutation_schema_func import permutation_schema
 
@@ -32,8 +33,11 @@ def pca_single_roi(roi, n_comps=None):
     pca = PCA(n_components=n_comps)
     roi_pca = pca.fit_transform(roi)
     explained_var = np.cumsum(pca.explained_variance_ratio_)
-    
-    return roi_pca, explained_var
+
+    # zscore
+    roi_zscore = zscore(roi_pca, axis=0)
+
+    return roi_zscore, explained_var
 
 def canonical_correlation(X,Y, center=True):
     
