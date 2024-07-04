@@ -30,6 +30,7 @@ def pca_single_roi(roi, n_comps=None):
     - explained_var : array, cumulative sum of percentage of explained variance by each component
     """
 
+    # PCA
     pca = PCA(n_components=n_comps)
     roi_pca = pca.fit_transform(roi)
     explained_var = np.cumsum(pca.explained_variance_ratio_)
@@ -321,15 +322,30 @@ def run_cca_all_subjects(sub_list, domains, atlas_file, n_perms=1000, chunk_size
     # Reset printing settings
     sys.stdout = orig_stdout
 
-def pca_all_rois(sub, domains, threshold, critical_v):
+def pca_all_rois(sub, domains, threshold, critical_v, atlas=''):
     
     """
+    Explore impact of PCA on all ROIs of a single subject
 
+    Input:
+    - sub : int, indicates subject number
+    - domains : dict, including domain names as keys and domain regressors as values
+    - threshold : str, indicates whether to specify n_components or min variance explained for PCA
+    - critical_v : list, containing floats, inidicating thershold levels of variance explained to test
+    - atlas : str, indicates atlas to use; default = '', which means atlas 200
+
+    Output:
+    - explained_variance : dict, containing ROIs as keys and array with cumulative sum of explained variance for each component as values
+    - critical_c : dict, containing ROIs as keys and 
+    - max_nc : int, 
+    - n_rois_below : int,
+    - rois_below : array, 
+    - rois_to_exclude : array, 
     """
 
     # Load data
     data = image.load_img('/data1/ISC_101_setti/dati_fMRI_TORINO/sub-0{}/ses-AV/func/allruns_cleaned_sm6_SG.nii.gz'.format(sub)).get_fdata()
-    atlas = image.load_img('/data1/Action_teresi/CCA/atlas/sub-{}_atlas100_2orig.nii.gz'.format(sub)).get_fdata()
+    atlas = image.load_img('/data1/Action_teresi/CCA/atlas/sub-{}_atlas{}_2orig.nii.gz'.format(sub, atlas)).get_fdata()
     labels = np.loadtxt('/data1/Action_teresi/CCA/atlas/Schaefer_7N_labels.txt', dtype=str)
 
     # Extract rois
@@ -387,22 +403,20 @@ def pca_all_rois(sub, domains, threshold, critical_v):
             print('ROIs with explained variance lower than {}: {}'.format(critical, rois_to_exclude))
         
         return explained_variance, n_rois_below, rois_below, rois_to_exclude
-      
-    
-    
-
+         
 if __name__ == '__main__': 
+
+    # Set parameters
+    sub_list = np.array([12, 13, 14, 15, 16, 17, 18, 19, 22, 32])
+    atlas = ''
 
     # Print output to txt file
     log_path = '/home/laura.marras/Documents/Repositories/Action101/data/cca_results/logs/'
     if not os.path.exists(log_path):
         os.makedirs(log_path)
     
-    logfile = open('{}log_pca_atlas{}.txt'.format(log_path, '100'), 'w')
+    logfile = open('{}log_pca_atlas{}.txt'.format(log_path, atlas), 'w')
     sys.stdout = logfile
-
-    # Set parameters
-    sub_list = np.array([12, 13, 14, 15, 16, 17, 18, 19, 22, 32])
 
     # Load task models
     domains_list = ['space_movement', 'agent_objective', 'social_connectivity', 'emotion_expression', 'linguistic_predictiveness']
@@ -416,8 +430,8 @@ if __name__ == '__main__':
     
     # Test PCA impact for all subs
     for s, sub in enumerate(sub_list): 
-        #explained_v, n_rois_below[s], rois_below[sub], rois_to_exclude[sub] = pca_all_rois(sub, domains, threshold='components', critical_v=[0.9])#, 0.85])
-        explained_v, critical_c, max_nc[s], n_rois_below[s], rois_below[sub], rois_to_exclude[sub] = pca_all_rois(sub, domains, threshold='minvariance', critical_v=[0.9])#, 0.85])
+        explained_v, n_rois_below[s], rois_below[sub], rois_to_exclude[sub] = pca_all_rois(sub, domains, threshold='components', critical_v=[0.9], atlas=atlas)
+        explained_v, critical_c, max_nc[s], n_rois_below[s], rois_below[sub], rois_to_exclude[sub] = pca_all_rois(sub, domains, threshold='minvariance', critical_v=[0.9], atlas=atlas)
 
 
     roistoex = []
