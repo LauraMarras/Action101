@@ -182,12 +182,13 @@ def extract_roi(data, atlas):
     return data_rois, n_rois, n_voxels_rois
 
 @timeit
-def run_cca_all_rois(data_rois, domains, perm_schema, minvox, pooln=20):
+def run_cca_all_rois(s, data_rois, domains, perm_schema, minvox, pooln=20):
     
     """
     Run canonical correlation for all ROIs using parallelization
     
     Inputs:
+    - s : int, sub index
     - data_rois : dict, including for each ROI within atlas, 2d (or 1d) matrix of shape = voxels (by time) containing fMRI signal of each voxel within ROI
     - domains : dict, including domains as keys and 2d matrix of shape = n_tpoints by n_columns as values
     - perm_schema : array, 2d matrix of shape = n_tpoints, n_perms; first row contains unshuffled indices --> contains indices for each permutation
@@ -234,7 +235,7 @@ def run_cca_all_rois(data_rois, domains, perm_schema, minvox, pooln=20):
     
     # Unpack results
     for result_pool in results_pool:
-        njob = result_pool[1]._job
+        njob = result_pool[1]._job - (s*n_rois)
         roi_n = result_pool[0]
         result_matrix[njob, :, :, :] = result_pool[1].get()
         result_dict[roi_n] = result_pool[1].get()
@@ -272,25 +273,28 @@ def run_cca_all_subjects(sub_list, domains, atlas_file, n_perms=1000, chunk_size
     orig_stdout = sys.stdout
     
     # Iterate over subjects
-    for sub in sub_list:
+    for s, sub in enumerate(sub_list):
         
+        # Print sub number on screen
+        print('sub-{}'.format(sub))
+    
         # Print output to txt file
         log_path = '/home/laura.marras/Documents/Repositories/Action101/data/cca_results/sub-{}{}/logs/'.format(sub, suffix)
         if not os.path.exists(log_path):
             os.makedirs(log_path)
         
-        logfile = open('{}log_cca_sub-{}_{}.txt'.format(log_path, sub, 'Schaefer200' if atlas_file == 'atlas_2orig' else 'Schaefer1000'), 'w')
+        logfile = open('{}log_cca_sub-{}_{}.txt'.format(log_path, sub, atlas_file), 'w')
         sys.stdout = logfile
 
         print(datetime.now())
         print('CCA of sub-{}'.format(sub))
         print('- n_perms: {}'.format(n_perms))
         print('- seed: {}'.format(seed))
-        print('\n- Atlas: {}'.format('Schaefer200' if atlas_file == 'atlas_2orig' else 'Schaefer1000'))
+        print('\n- Atlas: {}'.format(atlas_file))
 
         # Load data
         data = image.load_img('/data1/ISC_101_setti/dati_fMRI_TORINO/sub-0{}/ses-AV/func/allruns_cleaned_sm6_SG.nii.gz'.format(sub)).get_fdata()
-        atlas = image.load_img('/data1/Action_teresi/CCA/atlas/sub-{}_atlas_2orig.nii.gz'.format(sub)).get_fdata()
+        atlas = image.load_img('/data1/Action_teresi/CCA/atlas/sub-{}_{}_atlas_2orig.nii.gz'.format(sub, atlas_file)).get_fdata()
         
         # Extract rois
         data_rois, n_rois, n_voxels = extract_roi(data, atlas)
@@ -306,7 +310,7 @@ def run_cca_all_subjects(sub_list, domains, atlas_file, n_perms=1000, chunk_size
         perm_schema = permutation_schema(n_tpoints, n_perms=n_perms, chunk_size=chunk_size)
 
         # Run cca for each roi
-        result_matrix, result_dict, pca_dict = run_cca_all_rois(data_rois, domains, perm_schema, minvox, pooln=pooln)
+        result_matrix, result_dict, pca_dict = run_cca_all_rois(s, data_rois, domains, perm_schema, minvox, pooln=pooln)
         
         # Save
         if save:
@@ -314,7 +318,7 @@ def run_cca_all_subjects(sub_list, domains, atlas_file, n_perms=1000, chunk_size
             if not os.path.exists(folder_path):
                 os.makedirs(folder_path)
 
-            np.savez('{}CCA_res_sub-{}_{}'.format(folder_path, sub, 'Schaefer200' if atlas_file == 'atlas_2orig' else 'Schaefer1000'), result_matrix=result_matrix, result_dict=result_dict, pca_dict=pca_dict)
+            np.savez('{}CCA_res_sub-{}_{}'.format(folder_path, sub, atlas_file), result_matrix=result_matrix, result_dict=result_dict, pca_dict=pca_dict)
         
         # Close textfile
         logfile.close()

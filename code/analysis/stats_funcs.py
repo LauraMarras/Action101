@@ -306,11 +306,11 @@ def save_nifti(atlas, n_doms, results_group, pvals_group, path):
         image_final[x_inds, y_inds, z_inds, n_doms:] = 1-pvals_group[roi]
     
     # Save
-    if not os.path.exists(path):
-        os.makedirs(path)
+    if not os.path.exists(''.join([x + '/' for x in (path.split('/')[:-1])])):
+        os.makedirs(''.join([x + '/' for x in (path.split('/')[:-1])]))
 
     img = image.new_img_like(atlas, image_final, affine=atlas.affine, copy_header=False)
-    img.to_filename('{}cca_results_group.nii'.format(path))
+    img.to_filename(path)
 
     return image_final
     
