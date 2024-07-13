@@ -110,16 +110,19 @@ def get_pvals_sub(sub, save=True, suffix=''):
 
     # Load R2 results of single subject
     res_sub = np.load('/home/laura.marras/Documents/Repositories/Action101/data/cca_results/sub-{}{}/CCA_res_sub-{}_Schaefer200.npz'.format(sub, suffix, sub), allow_pickle=True)['result_dict'].item()
-    
+    n_rois = len(res_sub.keys())
+    n_perms = res_sub[1].shape[1]
+    n_doms = res_sub[1].shape[2]
+
     # Initialize dictionaries
-    pvals_sub = {}
-    res_sub_dict = {}
+    pvals_sub = np.full((n_rois, n_perms, n_doms), np.nan)
+    res_sub_mat = np.full((n_rois, n_perms, n_doms), np.nan)
 
     # Iterate over ROIs and get R2 results and calculate p-values
-    for roi in res_sub.keys():
+    for r, roi in enumerate(res_sub.keys()):
         res_roi = res_sub[roi][1,:,:]
-        pvals_sub[roi] = np.array([get_pvals(res_roi[:,d]) for d in range(res_roi.shape[-1])]).T
-        res_sub_dict[roi] = res_roi
+        pvals_sub[r] = np.array([get_pvals(res_roi[:,d]) for d in range(res_roi.shape[-1])]).T
+        res_sub_mat[r] = res_roi
 
     # Save results
     if save:
@@ -127,9 +130,9 @@ def get_pvals_sub(sub, save=True, suffix=''):
         if not os.path.exists(path):
             os.makedirs(path)
         
-        np.savez(path + 'CCA_stats_sub-{}'.format(sub), pvals_sub=pvals_sub, res_sub_dict=res_sub_dict)  
+        np.savez(path + 'CCA_stats_sub-{}'.format(sub), pvals_sub=pvals_sub, res_sub_dict=res_sub_mat)  
 
-    return res_sub_dict, pvals_sub
+    return res_sub_mat, pvals_sub
 
 def get_pval_pareto(results, tail_percentile=0.9, plot=None):
 
@@ -216,18 +219,18 @@ def fisher_sum(pvals_all_subs):
 
     return pval, t
 
-def get_pvals_group(rois, pvals_subs, res_subs, n_perms, n_doms, save=True):
+def get_pvals_group(rois, pvals_subs, res_subs, maxT=False, save=True, suffix=''):
     
     """
     Get p values at group level (each permutation and each domain)
     
     Inputs:
     - rois : list or array of ints or strings, list of ROIs (keys of single subject results)
-    - pvals_subs : dict, containing sub number as keys and dictionaries as values, containing ROIs as keys and pvals as values (2d array of shape = n_perms by n_doms)
-    - res_subs : dict, containing sub number as keys and dictionaries as values, containing ROIs as keys and R2 as values (2d array of shape = n_perms by n_doms)
-    - n_perms : int, number of permutations
-    - n_doms : int, number of domains
+    - pvals_subs : array, 4d array of shape = n_subs by n_rois by n_perms by n_doms
+    - res_subs : array, 4d array of shape = n_subs by n_rois by n_perms by n_doms
+    - maxT : bool, whether to correct for multiple comparisons using max-T correction; default=False
     - save : bool, whether to save group results; default=True
+    - suffix : str, suffix; default = ''
 
     Outputs:
     - results_group : dict, containing ROIs as keys and mean R2 results of non permuted data as values (1d array of shape = n_doms)
@@ -238,30 +241,37 @@ def get_pvals_group(rois, pvals_subs, res_subs, n_perms, n_doms, save=True):
     - get_pval_pareto()
     """
     
-    # Initialize dictionaries
-    pvals_group = {}
-    results_group = {}
+    # Get dimensions
+    n_subs, n_rois, n_perms, n_doms = res_subs.shape
     
+    # Aggregate results across subs by averaging real r
+    results_group = np.mean(res_subs, axis=0)[:,0,:]
+    
+    # Initialize pvals matrix
+    aggregated_pvals = np.empty((n_rois, n_perms, n_doms))
+    pvals_group = np.empty((n_rois, n_doms))
+
     # Iterate over ROIs
-    for roi in rois:
-
-        # Initialize arrays for aggregated results
-        pvals_aggregated = np.empty((n_perms, n_doms, len(pvals_subs.keys())))
-        res_aggregated = np.empty((n_doms, len(pvals_subs.keys())))
-
-        # Aggregate results over subjects
-        for s, sub in enumerate(pvals_subs.keys()):
-            pvals_aggregated[:,:,s] = pvals_subs[sub][roi]
-            res_aggregated[:,s] = res_subs[sub][roi][0,:]
-
-        # Get mean results across subjects, for each domain
-        results_group[roi] = np.mean(res_aggregated, axis=-1)
+    for r, roi in enumerate(rois):
+        pvals_roi = np.rollaxis(pvals_subs, 0, 4)[r]
         
         # Get group p_val with Fisher's sum
-        summed_pvals, _ = fisher_sum(pvals_aggregated)
+        aggregated_pvals[r], _ = fisher_sum(pvals_roi)
 
-        # Get non-parametric results on summed pvals (with pareto)
-        pvals_group[roi] = np.array([get_pval_pareto((1-summed_pvals[:,d]), plot='{}_{}'.format(roi, d+1)) for d in range(n_doms)])
+    # Max-T correction: get max distro nulla across rois
+    if maxT:
+        distro_maxt = np.max(aggregated_pvals, axis=0)
+    
+    # Get non-parametric results on summed pvals (with pareto)
+    for r, roi in enumerate(rois):
+        for d in range(n_doms):
+            if maxT:
+                pvals_roi_dom = 1- np.append(aggregated_pvals[r,0,d], distro_maxt[1:,d])
+            
+            else:
+                pvals_roi_dom = aggregated_pvals[r,:,d]
+
+            pvals_group[r,d] = np.array(get_pval_pareto(pvals_roi_dom))
 
     # Save results
     if save:
@@ -269,7 +279,7 @@ def get_pvals_group(rois, pvals_subs, res_subs, n_perms, n_doms, save=True):
         if not os.path.exists(path):
             os.makedirs(path)
         
-        np.savez(path + 'CCA_stats_group', pvals_group=pvals_group, results_group=results_group)  
+        np.savez(path + 'CCA_res_group{}{}'.format(suffix, '_maxT' if maxT else ''), pvals_group=pvals_group, results_group=results_group)  
 
     return results_group, pvals_group
 
