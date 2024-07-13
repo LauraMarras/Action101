@@ -275,9 +275,6 @@ def run_cca_all_subjects(sub_list, domains, atlas_file, n_perms=1000, chunk_size
     # Iterate over subjects
     for s, sub in enumerate(sub_list):
         
-        # Print sub number on screen
-        print('sub-{}'.format(sub))
-    
         # Print output to txt file
         log_path = '/home/laura.marras/Documents/Repositories/Action101/data/cca_results/sub-{}{}/logs/'.format(sub, suffix)
         if not os.path.exists(log_path):
