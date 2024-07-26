@@ -182,7 +182,7 @@ def extract_roi(data, atlas):
     return data_rois, n_rois, n_voxels_rois
 
 @timeit
-def run_cca_all_rois(s, data_rois, domains, perm_schema, minvox, pooln=20):
+def run_cca_all_rois(s, data_rois, domains, perm_schema, minvox, pooln=20, skip_roi=True):
     
     """
     Run canonical correlation for all ROIs using parallelization
@@ -229,8 +229,20 @@ def run_cca_all_rois(s, data_rois, domains, perm_schema, minvox, pooln=20):
             results_pool.append((r, result_pool))
 
         else:
-            print('- ROI {} voxels are {}, less than the max number of predictors!! This ROI will be discarded'.format(r, roi.shape[1]))
+            if skip_roi:
+                print('- ROI {} voxels are {}, less than the max number of predictors!! This ROI will be discarded'.format(r, roi.shape[1]))
+            else:
+                # Replicate some of the voxels of ROI to reach min dimension
+                voxelstoadd = minvox - roi.shape[1]
+                print('- ROI {} voxels are {}, less than the max number of predictors!! {} voxels have been added by duplicating existing voxels'.format(r, roi.shape[1], voxelstoadd))
+                roi = np.hstack((roi, roi[:,:voxelstoadd]))
 
+                # Continue with pca and cca
+                roi_pca, pca_dict[r] = pca_single_roi(roi, n_comps=minvox)
+
+                # Run canoncorr for each ROI with parallelization and store results
+                result_pool = pool.apply_async(run_cca_single_roi, args=(roi_pca, perm_schema, domains))
+                results_pool.append((r, result_pool))
     pool.close()
     
     # Unpack results
@@ -242,7 +254,7 @@ def run_cca_all_rois(s, data_rois, domains, perm_schema, minvox, pooln=20):
 
     return result_matrix, result_dict, pca_dict
 
-def run_cca_all_subjects(sub_list, domains, atlas_file, n_perms=1000, chunk_size=15, seed=0, pooln=20, save=True, suffix=''):
+def run_cca_all_subjects(sub_list, domains, atlas_file, n_perms=1000, chunk_size=15, seed=0, pooln=20, skip_roi=True, save=True, suffix=''):
     
     """
     Run canonical correlation for all subjects
@@ -307,7 +319,7 @@ def run_cca_all_subjects(sub_list, domains, atlas_file, n_perms=1000, chunk_size
         perm_schema = permutation_schema(n_tpoints, n_perms=n_perms, chunk_size=chunk_size)
 
         # Run cca for each roi
-        result_matrix, result_dict, pca_dict = run_cca_all_rois(s, data_rois, domains, perm_schema, minvox, pooln=pooln)
+        result_matrix, result_dict, pca_dict = run_cca_all_rois(s, data_rois, domains, perm_schema, minvox, pooln=pooln, skip_roi=skip_roi)
         
         # Save
         if save:
