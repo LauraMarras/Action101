@@ -194,7 +194,8 @@ def run_cca_all_rois(s, data_rois, domains, perm_schema, minvox, pooln=20, skip_
     - perm_schema : array, 2d matrix of shape = n_tpoints, n_perms; first row contains unshuffled indices --> contains indices for each permutation
     - minvox : int, number of components to keep in PCA, in this case it will be the number of voxels of the smallest ROI (provided that it is higher than the maximum number of predictors of the task domains)
     - pooln : int, number of parallelization processes; default = 20
-    
+    - skip_roi : bool, how to deal with ROIs with n_voxels < n_predictors, if False add missing voxels using ROI mean signal, if True skip ROI; default = True
+
     Outputs:
     - result_matrix : array, 4d matrix of shape = n_rois by 2 by n_perms by n_domains; containing R2 values (not adjusted and adjusted) for each ROI, each permutation and each domain
     - result_dict : dict, including ROI as keys and result matrix of each ROI as values
@@ -231,11 +232,15 @@ def run_cca_all_rois(s, data_rois, domains, perm_schema, minvox, pooln=20, skip_
         else:
             if skip_roi:
                 print('- ROI {} voxels are {}, less than the max number of predictors!! This ROI will be discarded'.format(r, roi.shape[1]))
+            
             else:
-                # Replicate some of the voxels of ROI to reach min dimension
+                # Add n voxels to reach min dimension by using ROI mean signal
                 voxelstoadd = minvox - roi.shape[1]
-                print('- ROI {} voxels are {}, less than the max number of predictors!! {} voxels have been added by duplicating existing voxels'.format(r, roi.shape[1], voxelstoadd))
-                roi = np.hstack((roi, roi[:,:voxelstoadd]))
+                print('- ROI {} voxels are {}, less than the max number of predictors!! {} voxels added with mean ROI signal as signal'.format(r, roi.shape[1], voxelstoadd))
+                
+                meanvox = np.mean(roi, axis=1)
+                voxelstoaddmat = np.tile(meanvox, (voxelstoadd, 1)).T
+                roi = np.hstack((roi, voxelstoaddmat))
 
                 # Continue with pca and cca
                 roi_pca, pca_dict[r] = pca_single_roi(roi, n_comps=minvox)
@@ -267,6 +272,7 @@ def run_cca_all_subjects(sub_list, domains, atlas_file, n_perms=1000, chunk_size
     - chunk_size: int, size of chunks to be kept contiguous, in TR; default = 15 (30s)
     - seed: int, seed for the random permutation; default = 0
     - pooln : int, number of parallelization processes; default = 20
+    - skip_roi : bool, how to deal with ROIs with n_voxels < n_predictors, if False add missing voxels using ROI mean signal, if True skip ROI; default = True
     - save : bool, whether to save results as npy files; default = True
     - suffix : str, foldername suffix to add to saving path; default = ''
     
