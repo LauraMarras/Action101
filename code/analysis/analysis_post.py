@@ -85,19 +85,20 @@ def ttest_domains(results, dom_combs, dom_combs_str, fdr_opt=True, save=False):
 
     return ts, pvals
 
-def clustering(results_group, kmax, atlas_file):
+def clustering(results_group, n_clust_max, atlas_file):
 
-    silhouette_avg, clusters_labels = evalKMeans(range(2, kmax+1), results_group, print_otp=False)
+    silhouette_avg, clusters_labels = evalKMeans(range(2, n_clust_max+1), results_group, print_otp=False)
+    clusters_labels += 1
 
     # Load Atlas
     atlas = image.load_img('/data1/Action_teresi/CCA/atlas/Schaefer_7N_{}.nii.gz'.format(atlas_file[-3:]))
     x,y,z = atlas.get_fdata().shape
         
     # Initialize volume
-    image_final = np.zeros((x, y, z, kmax+1-2))
+    image_final = np.zeros((x, y, z, n_clust_max+1-2))
 
     # Create volume with cluster values for each k
-    for k in range(kmax+1-2):
+    for k in range(n_clust_max+1-2):
         for r in range(results_group.shape[0]):
             x_inds, y_inds, z_inds = np.where(atlas.get_fdata()==r+1)
             image_final[x_inds, y_inds, z_inds, k] = clusters_labels[k,r]
@@ -136,9 +137,9 @@ if __name__ == '__main__':
     #ts, pvals = ttest_domains(results, dom_combs, dom_combs_str, fdr_opt=True, save=True)
 
     # Clustering
-    kmax=10
+    n_clust_max=10
     results_group = np.mean(results, axis=0)
-    #silhouette_avg, clusters_labels = clustering(results_group, kmax, atlas_file)
+    silhouette_avg, clusters_labels = clustering(results_group, n_clust_max, atlas_file)
 
     # Create Full model
     full_model = {'full_model': np.hstack([domains[d] for d in domains_list])}
@@ -155,7 +156,7 @@ if __name__ == '__main__':
     # Initialize image matrix
     image_final = np.zeros((x, y, z))
 
-    # Assign group R2 and p_value to each voxel
+    # Assign group R2 to each voxel
     for roi in range(1, 201):
         x_inds, y_inds, z_inds = np.where(atlas.get_fdata()==roi)
         
