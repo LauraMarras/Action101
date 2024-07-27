@@ -90,8 +90,8 @@ def get_pvals(results):
 
     return pvals
 
-def get_pvals_sub(sub, save=True, suffix=''):
-    
+def get_pvals_sub(sub, save=True, suffix='', global_path=None):
+
     """
     Get p values for each subject (each permutation and each domain)
     
@@ -108,8 +108,10 @@ def get_pvals_sub(sub, save=True, suffix=''):
     - get_pvals()
     """
 
+    if global_path is None: global_path = os.getcwd()
+
     # Load R2 results of single subject
-    res_sub = np.load('/home/laura.marras/Documents/Repositories/Action101/data/cca_results/sub-{}{}/CCA_res_sub-{}_Schaefer200.npz'.format(sub, suffix, sub), allow_pickle=True)['result_dict'].item()
+    res_sub = np.load('{}cca_results/sub-{}{}/CCA_res_sub-{}_Schaefer200.npz'.format(global_path,sub, suffix, sub), allow_pickle=True)['result_dict'].item()
     n_rois = len(res_sub.keys())
     n_perms = res_sub[1].shape[1]
     n_doms = res_sub[1].shape[2]
@@ -126,7 +128,7 @@ def get_pvals_sub(sub, save=True, suffix=''):
 
     # Save results
     if save:
-        path = '/home/laura.marras/Documents/Repositories/Action101/data/cca_results/sub-{}{}/'.format(sub, suffix)
+        path = '{}/cca_results/sub-{}{}/'.format(global_path,sub,suffix)
         if not os.path.exists(path):
             os.makedirs(path)
         
@@ -219,8 +221,8 @@ def fisher_sum(pvals_all_subs):
 
     return pval, t
 
-def get_pvals_group(rois, pvals_subs, res_subs, maxT=False, save=True, suffix=''):
-    
+def get_pvals_group(rois, pvals_subs, res_subs, maxT=False, save=True, suffix='',global_path=''):
+
     """
     Get p values at group level (each permutation and each domain)
     
@@ -249,6 +251,7 @@ def get_pvals_group(rois, pvals_subs, res_subs, maxT=False, save=True, suffix=''
     
     # Initialize pvals matrix
     aggregated_pvals = np.empty((n_rois, n_perms, n_doms))
+    aggregated_stats = np.empty((n_rois, n_perms, n_doms))
     pvals_group = np.empty((n_rois, n_doms))
 
     # Iterate over ROIs
@@ -256,26 +259,26 @@ def get_pvals_group(rois, pvals_subs, res_subs, maxT=False, save=True, suffix=''
         pvals_roi = np.rollaxis(pvals_subs, 0, 4)[r]
         
         # Get group p_val with Fisher's sum
-        aggregated_pvals[r], _ = fisher_sum(pvals_roi)
+        aggregated_pvals[r], aggregated_stats[r] = fisher_sum(pvals_roi)
 
     # Max-T correction: get max distro nulla across rois
     if maxT:
-        distro_maxt = np.max(aggregated_pvals, axis=0)
-    
+        distro_maxt = np.max(np.max(aggregated_stats, axis=-1), axis=0)
+
     # Get non-parametric results on summed pvals (with pareto)
     for r, roi in enumerate(rois):
         for d in range(n_doms):
             if maxT:
-                pvals_roi_dom = 1- np.append(aggregated_pvals[r,0,d], distro_maxt[1:,d])
-            
+                pvals_roi_dom = np.append(aggregated_stats[r,0,d], distro_maxt[1:])
+
             else:
-                pvals_roi_dom = aggregated_pvals[r,:,d]
+                pvals_roi_dom = aggregated_stats[r,:,d]
 
             pvals_group[r,d] = np.array(get_pval_pareto(pvals_roi_dom))
 
     # Save results
     if save:
-        path = '/home/laura.marras/Documents/Repositories/Action101/data/cca_results/group/'
+        path = global_path + 'cca_results/group/'
         if not os.path.exists(path):
             os.makedirs(path)
         
@@ -283,8 +286,8 @@ def get_pvals_group(rois, pvals_subs, res_subs, maxT=False, save=True, suffix=''
 
     return results_group, pvals_group
 
-def save_nifti(atlas, n_doms, results_group, pvals_group, path):
-    
+def save_nifti(atlas, n_doms, results_group, pvals_group, path=''):
+
     """
     Create and save Nifti image of results
     
