@@ -139,15 +139,16 @@ if __name__ == '__main__':
     # Clustering
     n_clust_max=10
     results_group = np.mean(results, axis=0)
-    silhouette_avg, clusters_labels = clustering(results_group, n_clust_max, atlas_file)
+    #silhouette_avg, clusters_labels = clustering(results_group, n_clust_max, atlas_file)
 
     # Create Full model
     full_model = {'full_model': np.hstack([domains[d] for d in domains_list])}
     
     # Run CCA for first sub
-    run_cca_all_subjects([sub_list[0]], full_model, atlas_file, n_perms=0, seed=0, pooln=25, skip_roi=False, save=True, suffix='_pca_fullmodel')
+    suffix = '_pca_fullmodel'
+    run_cca_all_subjects([sub_list[0]], full_model, atlas_file, n_perms=0, seed=0, pooln=25, skip_roi=False, save=True, suffix=suffix)
 
-    results_sub, _ = get_pvals_sub(sub_list[0], save=True, suffix='_pca_fullmodel')
+    results_sub, _ = get_pvals_sub(sub_list[0], save=True, suffix=suffix, global_path='/home/laura.marras/Documents/Repositories/Action101/data/')
 
     # Load Atlas
     atlas = image.load_img('/data1/Action_teresi/CCA/atlas/Schaefer_7N_{}.nii.gz'.format(atlas_file[-3:]))
@@ -163,7 +164,7 @@ if __name__ == '__main__':
         image_final[x_inds, y_inds, z_inds] = results_sub[roi-1,0,0]
 
     img = image.new_img_like(atlas, image_final, affine=atlas.affine, copy_header=False)
-    img.to_filename('/data1/Action_teresi/CCA/sub-{}_cca_{}_{}.nii.gz'.format(sub_list[0], atlas_file, '_pca_fullmodel'))
+    img.to_filename('/data1/Action_teresi/CCA/sub-{}_cca_{}{}.nii.gz'.format(sub_list[0], atlas_file, suffix))
     
     
     print('')
