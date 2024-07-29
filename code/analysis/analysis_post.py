@@ -3,10 +3,12 @@ import numpy as np
 from nilearn import image
 from canonical_correlation_funcs import extract_roi, run_cca_all_subjects
 from stats_funcs import get_pvals_sub, get_pvals_group, save_nifti
+from sklearn.manifold import MDS
 from scipy.stats import false_discovery_control as fdr
 from scipy.stats import ttest_ind
 import itertools
 from utils.eval_kmeans import evalKMeans
+from matplotlib import pyplot as plt
 
 def evaluate_nvoxels_rois(sub_list, atlas_file, n_predictors, print_opt=True, save=False):
     
@@ -118,53 +120,48 @@ if __name__ == '__main__':
     atlas_file = 'Schaefer200' #'Schaefer100' #
     suffix = '_pca'
 
+    # Clustering
+    n_clust_max=10
+    results_group = np.load('/home/laura.marras/Documents/Repositories/Action101/data/cca_results/group/CCA_res_group{}_{}.npz'.format(suffix, atlas_file), allow_pickle=True)['results_group']
+    silhouette_avg, clusters_labels = clustering(results_group, n_clust_max, atlas_file)
+
+    mds = MDS().fit_transform(results_group)
+
+    # Plot
+    for clust in range(clusters_labels.shape[0]):
+        plt.figure()
+        scatt = plt.scatter(mds[:,0], mds[:,1], c=clusters_labels[clust])
+        plt.legend(*scatt.legend_elements(), loc='lower right', title='Clusters', ncol=2, frameon=False, borderpad=-1, labelspacing=0.1, borderaxespad=0.1, columnspacing=0.1, handletextpad=-0.5)
+        plt.title('Clustering ROIs')
+        plt.suptitle('Silhouette score for {} clusters = {}'.format(clust+2, silhouette_avg[clust]))
+        ax = plt.gca()
+        ax.spines['right'].set_visible(False)
+        ax.spines['top'].set_visible(False)
+        ax.spines['left'].set_visible(False)
+        ax.spines['bottom'].set_visible(False)
+        ax.axes.xaxis.set_visible(False)
+        ax.axes.yaxis.set_visible(False)
+        plt.savefig('/home/laura.marras/Documents/Repositories/Action101/data/cca_results/clustering/MDS_kmeans_{}clusters.png'.format(clust+2))
+
     # Load task models
-    domains_list = ['space_movement', 'agent_objective', 'social_connectivity', 'emotion_expression', 'linguistic_predictiveness']
-    domains = {d: np.loadtxt('/home/laura.marras/Documents/Repositories/Action101/data/models/domains/group_ds_conv_{}.csv'.format(d), delimiter=',', skiprows=1)[:, 1:] for d in domains_list}
-    n_doms = len(domains.keys())
-    n_predictors = np.sum([domains[d].shape[1] for d in domains_list])
-    dom_combs = list(itertools.combinations(range(n_doms), 2))
-    dom_combs_str = list(itertools.combinations(domains_list, 2))
+    # domains_list = ['space_movement', 'agent_objective', 'social_connectivity', 'emotion_expression', 'linguistic_predictiveness']
+    # domains = {d: np.loadtxt('/home/laura.marras/Documents/Repositories/Action101/data/models/domains/group_ds_conv_{}.csv'.format(d), delimiter=',', skiprows=1)[:, 1:] for d in domains_list}
+    # n_doms = len(domains.keys())
+    # n_predictors = np.sum([domains[d].shape[1] for d in domains_list])
+    # dom_combs = list(itertools.combinations(range(n_doms), 2))
+    # dom_combs_str = list(itertools.combinations(domains_list, 2))
 
     # Evaluate atlas ROIs dimension
     #rois_nsubs, rois_nvoxs_subs = evaluate_nvoxels_rois(sub_list, atlas_file, n_predictors, print_opt=True, save=False)
 
     # Load single subject results
-    results = np.load('/home/laura.marras/Documents/Repositories/Action101/data/cca_results/group/CCA_res_allsubs{}_{}.npz'.format(suffix, atlas_file), allow_pickle=True)['results'][:,:,0,:]
-    results_group = np.mean(results, axis=0)
+    #results = np.load('/home/laura.marras/Documents/Repositories/Action101/data/cca_results/group/CCA_res_allsubs{}_{}.npz'.format(suffix, atlas_file), allow_pickle=True)['results'][:,:,0,:]
+    #results_group = np.mean(results, axis=0)
 
     # Run t-tests
     #ts, pvals = ttest_domains(results, dom_combs, dom_combs_str, fdr_opt=True, save=True)
 
-    # Clustering
-    n_clust_max=10
-    results_group = np.mean(results, axis=0)
-    #silhouette_avg, clusters_labels = clustering(results_group, n_clust_max, atlas_file)
-
-    # Create Full model
-    full_model = {'full_model': np.hstack([domains[d] for d in domains_list])}
     
-    # Run CCA for first sub
-    suffix = '_pca_fullmodel'
-    run_cca_all_subjects([sub_list[0]], full_model, atlas_file, n_perms=0, seed=0, pooln=25, skip_roi=False, save=True, suffix=suffix)
 
-    results_sub, _ = get_pvals_sub(sub_list[0], save=True, suffix=suffix, global_path='/home/laura.marras/Documents/Repositories/Action101/data/')
-
-    # Load Atlas
-    atlas = image.load_img('/data1/Action_teresi/CCA/atlas/Schaefer_7N_{}.nii.gz'.format(atlas_file[-3:]))
-    x,y,z = atlas.get_fdata().shape
-
-    # Initialize image matrix
-    image_final = np.zeros((x, y, z))
-
-    # Assign group R2 to each voxel
-    for roi in range(1, 201):
-        x_inds, y_inds, z_inds = np.where(atlas.get_fdata()==roi)
-        
-        image_final[x_inds, y_inds, z_inds] = results_sub[roi-1,0,0]
-
-    img = image.new_img_like(atlas, image_final, affine=atlas.affine, copy_header=False)
-    img.to_filename('/data1/Action_teresi/CCA/sub-{}_cca_{}{}.nii.gz'.format(sub_list[0], atlas_file, suffix))
-    
     
     print('')
