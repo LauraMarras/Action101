@@ -17,17 +17,18 @@ if __name__ == '__main__':
     n_subs = len(sub_list)
     global_path = '/home/laura.marras/Documents/Repositories/Action101/data/'
     
-    cca = False
-    full_model_opt = True
+    cca = True
+    full_model_opt = False
     n_perms = 0
     chunk_size = 15
     seed = 0
     atlas_file = 'Schaefer100'
-    pooln = 40
+    pooln = 20
     skip_roi = False
-    suffix = '_pca_fullmodel'
+    variance_part = True
+    suffix = '_pca_variancepart' # '_pca_fullmodel' #
 
-    ss_stats = False
+    ss_stats = True
     save = True
     run_fdr = False
     group_stats = True
@@ -53,7 +54,7 @@ if __name__ == '__main__':
         print('Starting CCA')
         
         # Run CCA for all subjects
-        run_cca_all_subjects(sub_list, domains, atlas_file, n_perms, chunk_size, seed, pooln, skip_roi, save, suffix)
+        run_cca_all_subjects(sub_list, domains, atlas_file, n_perms, chunk_size, seed, pooln, skip_roi, variance_part, save, suffix)
 
         print('Finished CCA')
 
