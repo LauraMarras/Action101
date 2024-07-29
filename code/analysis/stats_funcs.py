@@ -90,7 +90,7 @@ def get_pvals(results):
 
     return pvals
 
-def get_pvals_sub(sub, save=True, suffix='', global_path=None):
+def get_pvals_sub(sub, save=True, suffix='', atlas_file='Schaefer200', global_path=None):
 
     """
     Get p values for each subject (each permutation and each domain)
@@ -99,6 +99,8 @@ def get_pvals_sub(sub, save=True, suffix='', global_path=None):
     - sub : int, sub number
     - save : bool, whether to save single subject's results; default=True
     - suffix : str, default=''
+    - atlas_file : str, default 'Schaefer200'
+    - global_path : str, default = None
 
     Outputs:
     - res_sub_dict : dict, containing ROIs as keys and R2 results as values (2d array of shape = n_perms by n_doms)
@@ -111,7 +113,7 @@ def get_pvals_sub(sub, save=True, suffix='', global_path=None):
     if global_path is None: global_path = os.getcwd()
 
     # Load R2 results of single subject
-    res_sub = np.load('{}cca_results/sub-{}{}/CCA_res_sub-{}_Schaefer200.npz'.format(global_path,sub, suffix, sub), allow_pickle=True)['result_dict'].item()
+    res_sub = np.load('{}cca_results/sub-{}{}/CCA_res_sub-{}_{}.npz'.format(global_path,sub, suffix, sub, atlas_file), allow_pickle=True)['result_dict'].item()
     n_rois = len(res_sub.keys())
     n_perms = res_sub[1].shape[1]
     n_doms = res_sub[1].shape[2]
@@ -132,7 +134,7 @@ def get_pvals_sub(sub, save=True, suffix='', global_path=None):
         if not os.path.exists(path):
             os.makedirs(path)
         
-        np.savez(path + 'CCA_stats_sub-{}'.format(sub), pvals_sub=pvals_sub, res_sub_dict=res_sub_mat)  
+        np.savez(path + 'CCA_stats_sub-{}_{}'.format(sub, atlas_file), pvals_sub=pvals_sub, res_sub_dict=res_sub_mat)  
 
     return res_sub_mat, pvals_sub
 
