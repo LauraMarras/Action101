@@ -134,7 +134,7 @@ if __name__ == '__main__':
                     os.makedirs(path)
                 
                 # Save numpy
-                np.savez(path + 'CCA_res_group{}'.format(suffix), results_group=results_group)  
+                np.savez(path + 'CCA_res_group{}_{}'.format(suffix, atlas_file), results_group=results_group)  
                 
                 # Create nifti
                 image_final = np.zeros(atlas.get_fdata().shape)
