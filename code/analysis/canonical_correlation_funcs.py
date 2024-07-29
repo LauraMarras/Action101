@@ -105,7 +105,7 @@ def canonical_correlation(X,Y, center=True):
 
     return r2, r2adj, A, B, R, U, V
 
-def run_cca_single_roi(roi, perm_schema, domains):
+def run_cca_single_roi(roi, perm_schema, domains, variance_part=False):
     
     """
     Run canonical correlation and store R2 between fMRI activity of a ROI and each domain model, first using real data and then permuted fMRI data
@@ -114,6 +114,7 @@ def run_cca_single_roi(roi, perm_schema, domains):
     - roi : array, 2d matrix of shape = n_tpoints by n_voxels containing fMRI data 
     - perm_schema : array, 2d matrix of shape = n_tpoints, n_perms; first row contains unshuffled indices --> contains indices for each permutation
     - domains : dict, including domains as keys and 2d matrix of shape = n_tpoints by n_columns as values
+    - variance_part : bool, whether to run variance partitioning version or not, if True, instead of single domains, all domains but one are iteratively used as models; default = False
     
     Outputs:
     - results : array, 3d matrix of shape = 2 by n_perms by n_domains; containing R2 values (not adjusted and adjusted) for each permutation and each domain
@@ -137,8 +138,11 @@ def run_cca_single_roi(roi, perm_schema, domains):
         Y = roi[order, :]
         
         # Run cca for each domain
-        for d, domain in enumerate(domains.values()):
-            X = domain
+        for d, domain in enumerate(domains):
+            if variance_part:
+                X = np.hstack([domains[dom] for dom in domains.keys() if dom!=domain])
+            else:
+                X = domains[domain]
             
             r2, r2adj, _, _, _, _, _ = canonical_correlation(X, Y)
             results[0, perm, d] = r2
@@ -182,7 +186,7 @@ def extract_roi(data, atlas):
     return data_rois, n_rois, n_voxels_rois
 
 @timeit
-def run_cca_all_rois(s, data_rois, domains, perm_schema, minvox, pooln=20, skip_roi=True):
+def run_cca_all_rois(s, data_rois, domains, perm_schema, minvox, pooln=20, skip_roi=True, variance_part=False):
     
     """
     Run canonical correlation for all ROIs using parallelization
@@ -195,7 +199,8 @@ def run_cca_all_rois(s, data_rois, domains, perm_schema, minvox, pooln=20, skip_
     - minvox : int, number of components to keep in PCA, in this case it will be the number of voxels of the smallest ROI (provided that it is higher than the maximum number of predictors of the task domains)
     - pooln : int, number of parallelization processes; default = 20
     - skip_roi : bool, how to deal with ROIs with n_voxels < n_predictors, if False add missing voxels using ROI mean signal, if True skip ROI; default = True
-
+    - variance_part : bool, whether to run variance partitioning version or not, if True, instead of single domains, all domains but one are iteratively used as models; default = False
+     
     Outputs:
     - result_matrix : array, 4d matrix of shape = n_rois by 2 by n_perms by n_domains; containing R2 values (not adjusted and adjusted) for each ROI, each permutation and each domain
     - result_dict : dict, including ROI as keys and result matrix of each ROI as values
@@ -226,7 +231,7 @@ def run_cca_all_rois(s, data_rois, domains, perm_schema, minvox, pooln=20, skip_
             roi_pca, pca_dict[r] = pca_single_roi(roi, n_comps=minvox)
 
             # Run canoncorr for each ROI with parallelization and store results
-            result_pool = pool.apply_async(run_cca_single_roi, args=(roi_pca, perm_schema, domains))
+            result_pool = pool.apply_async(run_cca_single_roi, args=(roi_pca, perm_schema, domains, variance_part))
             results_pool.append((r, result_pool))
 
         else:
@@ -259,7 +264,7 @@ def run_cca_all_rois(s, data_rois, domains, perm_schema, minvox, pooln=20, skip_
 
     return result_matrix, result_dict, pca_dict
 
-def run_cca_all_subjects(sub_list, domains, atlas_file, n_perms=1000, chunk_size=15, seed=0, pooln=20, skip_roi=True, save=True, suffix=''):
+def run_cca_all_subjects(sub_list, domains, atlas_file, n_perms=1000, chunk_size=15, seed=0, pooln=20, skip_roi=True, variance_part=False, save=True, suffix=''):
     
     """
     Run canonical correlation for all subjects
@@ -273,6 +278,7 @@ def run_cca_all_subjects(sub_list, domains, atlas_file, n_perms=1000, chunk_size
     - seed: int, seed for the random permutation; default = 0
     - pooln : int, number of parallelization processes; default = 20
     - skip_roi : bool, how to deal with ROIs with n_voxels < n_predictors, if False add missing voxels using ROI mean signal, if True skip ROI; default = True
+    - variance_part : bool, whether to run variance partitioning version or not, if True, instead of single domains, all domains but one are iteratively used as models; default = False
     - save : bool, whether to save results as npy files; default = True
     - suffix : str, foldername suffix to add to saving path; default = ''
     
@@ -325,7 +331,7 @@ def run_cca_all_subjects(sub_list, domains, atlas_file, n_perms=1000, chunk_size
         perm_schema = permutation_schema(n_tpoints, n_perms=n_perms, chunk_size=chunk_size)
 
         # Run cca for each roi
-        result_matrix, result_dict, pca_dict = run_cca_all_rois(s, data_rois, domains, perm_schema, minvox, pooln=pooln, skip_roi=skip_roi)
+        result_matrix, result_dict, pca_dict = run_cca_all_rois(s, data_rois, domains, perm_schema, minvox, pooln=pooln, skip_roi=skip_roi, variance_part=variance_part)
         
         # Save
         if save:
