@@ -116,32 +116,61 @@ if __name__ == '__main__':
     # Set parameters
     sub_list = np.array([12, 13, 14, 15, 16, 17, 18, 19, 22, 32])
     n_subs = len(sub_list)
+    plot_clust = False
     
-    atlas_file = 'Schaefer200' #'Schaefer100' #
-    suffix = '_pca'
+    atlas_file = 'Schaefer100' #'Schaefer200' #
+    suffix = '_pca_variancepart'
 
+    # Variance partitioning
+    results_varpart = np.load('/home/laura.marras/Documents/Repositories/Action101/data/cca_results/group/CCA_res_group{}_{}.npz'.format(suffix, atlas_file), allow_pickle=True)['results_group']
+    results_fullmod = np.load('/home/laura.marras/Documents/Repositories/Action101/data/cca_results/group/CCA_res_group{}_{}.npz'.format('_pca_fullmodel', atlas_file), allow_pickle=True)['results_group']
+    
+    results_singledomsvarpart = np.expand_dims(results_fullmod, 1) - results_varpart
+
+    # Save numpy
+    np.savez('/home/laura.marras/Documents/Repositories/Action101/data/cca_results/group/CCA_res_group_singledoms_{}'.format(atlas_file), results_singledoms=results_singledomsvarpart)  
+    
+    # Create nifti
+    atlas = image.load_img('/data1/Action_teresi/CCA/atlas/Schaefer_7N_{}.nii.gz'.format(atlas_file[-3:]))
+    atlas_rois = np.unique(atlas.get_fdata()).astype(int)
+    atlas_rois = np.delete(atlas_rois, np.argwhere(atlas_rois==0))
+    x,y,z = atlas.get_fdata().shape
+    image_final = np.squeeze(np.zeros((x,y,z,5)))
+
+    for r, roi in enumerate(atlas_rois):
+        x_inds, y_inds, z_inds = np.where(atlas.get_fdata()==roi)
+        
+        image_final[x_inds, y_inds, z_inds] = results_singledomsvarpart[r]
+
+    img = image.new_img_like(atlas, image_final, affine=atlas.affine, copy_header=False)
+    img.to_filename('/home/laura.marras/Documents/Repositories/Action101/data/cca_results/group/CCA_res_group{}_{}.nii'.format('_singledoms', atlas_file))
+
+    print('')
+    
+    
     # Clustering
-    n_clust_max=10
-    results_group = np.load('/home/laura.marras/Documents/Repositories/Action101/data/cca_results/group/CCA_res_group{}_{}.npz'.format(suffix, atlas_file), allow_pickle=True)['results_group']
-    silhouette_avg, clusters_labels = clustering(results_group, n_clust_max, atlas_file)
+    # n_clust_max=10
+    # results_group = np.load('/home/laura.marras/Documents/Repositories/Action101/data/cca_results/group/CCA_res_group{}_{}.npz'.format(suffix, atlas_file), allow_pickle=True)['results_group']
+    # silhouette_avg, clusters_labels = clustering(results_group, n_clust_max, atlas_file)
 
-    mds = MDS().fit_transform(results_group)
+    # mds = MDS().fit_transform(results_group)
 
     # Plot
-    for clust in range(clusters_labels.shape[0]):
-        plt.figure()
-        scatt = plt.scatter(mds[:,0], mds[:,1], c=clusters_labels[clust])
-        plt.legend(*scatt.legend_elements(), loc='lower right', title='Clusters', ncol=2, frameon=False, borderpad=-1, labelspacing=0.1, borderaxespad=0.1, columnspacing=0.1, handletextpad=-0.5)
-        plt.title('Clustering ROIs')
-        plt.suptitle('Silhouette score for {} clusters = {}'.format(clust+2, silhouette_avg[clust]))
-        ax = plt.gca()
-        ax.spines['right'].set_visible(False)
-        ax.spines['top'].set_visible(False)
-        ax.spines['left'].set_visible(False)
-        ax.spines['bottom'].set_visible(False)
-        ax.axes.xaxis.set_visible(False)
-        ax.axes.yaxis.set_visible(False)
-        plt.savefig('/home/laura.marras/Documents/Repositories/Action101/data/cca_results/clustering/MDS_kmeans_{}clusters.png'.format(clust+2))
+    if plot_clust:
+        for clust in range(clusters_labels.shape[0]):
+            plt.figure()
+            scatt = plt.scatter(mds[:,0], mds[:,1], c=clusters_labels[clust])
+            plt.legend(*scatt.legend_elements(), loc='lower right', title='Clusters', ncol=2, frameon=False, borderpad=-1, labelspacing=0.1, borderaxespad=0.1, columnspacing=0.1, handletextpad=-0.5)
+            plt.title('Clustering ROIs')
+            plt.suptitle('Silhouette score for {} clusters = {}'.format(clust+2, silhouette_avg[clust]))
+            ax = plt.gca()
+            ax.spines['right'].set_visible(False)
+            ax.spines['top'].set_visible(False)
+            ax.spines['left'].set_visible(False)
+            ax.spines['bottom'].set_visible(False)
+            ax.axes.xaxis.set_visible(False)
+            ax.axes.yaxis.set_visible(False)
+            plt.savefig('/home/laura.marras/Documents/Repositories/Action101/data/cca_results/clustering/MDS_kmeans_{}clusters.png'.format(clust+2))
 
     # Load task models
     # domains_list = ['space_movement', 'agent_objective', 'social_connectivity', 'emotion_expression', 'linguistic_predictiveness']
