@@ -90,13 +90,14 @@ def get_pvals(results):
 
     return pvals
 
-def get_pvals_sub(sub, save=True, suffix='', atlas_file='Schaefer200', global_path=None):
+def get_pvals_sub(sub, adjusted=True, save=True, suffix='', atlas_file='Schaefer200', global_path=None):
 
     """
     Get p values for each subject (each permutation and each domain)
     
     Inputs:
     - sub : int, sub number
+    - adjusted : bool, whether to get adjusted R2 or not adjusted R2; default=True (get adjusted)
     - save : bool, whether to save single subject's results; default=True
     - suffix : str, default=''
     - atlas_file : str, default 'Schaefer200'
@@ -122,9 +123,11 @@ def get_pvals_sub(sub, save=True, suffix='', atlas_file='Schaefer200', global_pa
     pvals_sub = np.full((n_rois, n_perms, n_doms), np.nan)
     res_sub_mat = np.full((n_rois, n_perms, n_doms), np.nan)
 
+    rind = 1 if adjusted else 0
+    
     # Iterate over ROIs and get R2 results and calculate p-values
     for r, roi in enumerate(res_sub.keys()):
-        res_roi = res_sub[roi][1,:,:]
+        res_roi = res_sub[roi][rind,:,:]
         pvals_sub[r] = np.array([get_pvals(res_roi[:,d]) for d in range(res_roi.shape[-1])]).T
         res_sub_mat[r] = res_roi
 

@@ -17,7 +17,7 @@ if __name__ == '__main__':
     n_subs = len(sub_list)
     global_path = '/home/laura.marras/Documents/Repositories/Action101/data/'
     
-    cca = True
+    cca = False
     full_model_opt = True
     n_perms = 0
     chunk_size = 15
@@ -29,7 +29,7 @@ if __name__ == '__main__':
     variance_part = False
     suffix = '_pcanoz_fullmodel' #'_pca_variancepart' # '_pca_fullmodel' #
 
-    ss_stats = False
+    ss_stats = True
     save = True
     run_fdr = False
     group_stats = False
@@ -70,7 +70,7 @@ if __name__ == '__main__':
 
         for s, sub in enumerate(sub_list):
 
-            results_subs[s], pvals_subs[s] = get_pvals_sub(sub, save=save, suffix=suffix, atlas_file=atlas_file, global_path=global_path)
+            results_subs[s], pvals_subs[s] = get_pvals_sub(sub, adjusted=False, save=save, suffix=suffix, atlas_file=atlas_file, global_path=global_path)
                         
             # Build dictionaries
             res_dict = {r+1: results_subs[s,r,0,:].squeeze() for r in range(len(atlas_rois))}
