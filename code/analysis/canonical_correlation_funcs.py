@@ -107,7 +107,7 @@ def canonical_correlation(X,Y, center=True):
 
     return r2, r2adj, A, B, R, U, V
 
-def run_cca_single_roi(roi, perm_schema, domains, variance_part=False):
+def run_cca_single_roi(roi, perm_schema, domains, variance_part=0):
     
     """
     Run canonical correlation and store R2 between fMRI activity of a ROI and each domain model, first using real data and then permuted fMRI data
@@ -116,13 +116,14 @@ def run_cca_single_roi(roi, perm_schema, domains, variance_part=False):
     - roi : array, 2d matrix of shape = n_tpoints by n_voxels containing fMRI data 
     - perm_schema : array, 2d matrix of shape = n_tpoints, n_perms; first row contains unshuffled indices --> contains indices for each permutation
     - domains : dict, including domains as keys and 2d matrix of shape = n_tpoints by n_columns as values
-    - variance_part : bool, whether to run variance partitioning version or not, if True, instead of single domains, all domains but one are iteratively used as models; default = False
+    - variance_part : int, n_perms to run variance partitioning (shuffling colums of single domain); default = 0, i.e. run single domain model
     
     Outputs:
     - results : array, 3d matrix of shape = 2 by n_perms by n_domains; containing R2 values (not adjusted and adjusted) for each permutation and each domain
         
     Calls:
     - canonical_correlation()
+    - permutation_schema()
     """
     
     # Get number of permutations and number of domains
@@ -141,12 +142,34 @@ def run_cca_single_roi(roi, perm_schema, domains, variance_part=False):
         
         # Run cca for each domain
         for d, domain in enumerate(domains):
-            if variance_part:
-                X = np.hstack([domains[dom] for dom in domains.keys() if dom!=domain])
-            else:
-                X = domains[domain]
             
-            r2, r2adj, _, _, _, _, _ = canonical_correlation(X, Y)
+            if variance_part:
+                # Create permutation schema to shuffle columns of left-out domain for variance partitioning
+                vperm_schema = permutation_schema(domains[domain].shape[0], n_perms=variance_part, chunk_size=1)
+                
+                # Initialize arrays to save all permuted results 
+                r2_p = np.full(variance_part, np.nan)
+                r2adj_p = np.full(variance_part, np.nan)
+
+                # For each permutation, build full model and shuffle columns of left-out domain
+                for vperm in range(1, vperm_schema.shape[1]):
+                    order = vperm_schema[:, vperm] # first colum contains original order (non-permuted)                 
+                    X = np.hstack([domains[dom] if dom!=domain else domains[dom][order,:] for dom in domains.keys()])
+                    
+                    # Run cca 
+                    r2_p[vperm-1], r2adj_p[vperm-1], _, _, _, _, _ = canonical_correlation(X, Y)
+                
+                # Get average R2 results across perms
+                r2 = np.mean(r2_p)
+                r2adj = np.mean(r2adj_p)
+
+            else:
+                # Select single domain as model
+                X = domains[domain]
+                
+                # Run cca
+                r2, r2adj, _, _, _, _, _ = canonical_correlation(X, Y)
+            
             results[0, perm, d] = r2
             results[1, perm, d] = r2adj
 
@@ -188,7 +211,7 @@ def extract_roi(data, atlas):
     return data_rois, n_rois, n_voxels_rois
 
 @timeit
-def run_cca_all_rois(s, data_rois, domains, perm_schema, minvox, pooln=20, zscore_opt=False, skip_roi=True, variance_part=False):
+def run_cca_all_rois(s, data_rois, domains, perm_schema, minvox, pooln=20, zscore_opt=False, skip_roi=True, variance_part=0):
     
     """
     Run canonical correlation for all ROIs using parallelization
@@ -202,8 +225,8 @@ def run_cca_all_rois(s, data_rois, domains, perm_schema, minvox, pooln=20, zscor
     - pooln : int, number of parallelization processes; default = 20
     - zscore_opt : bool, whether to z-score components after PCA or not; default = False
     - skip_roi : bool, how to deal with ROIs with n_voxels < n_predictors, if False add missing voxels using ROI mean signal, if True skip ROI; default = True
-    - variance_part : bool, whether to run variance partitioning version or not, if True, instead of single domains, all domains but one are iteratively used as models; default = False
-     
+    - variance_part : int, n_perms to run variance partitioning (shuffling colums of single domain); default = 0, i.e. run single domain model
+    
     Outputs:
     - result_matrix : array, 4d matrix of shape = n_rois by 2 by n_perms by n_domains; containing R2 values (not adjusted and adjusted) for each ROI, each permutation and each domain
     - result_dict : dict, including ROI as keys and result matrix of each ROI as values
@@ -263,7 +286,7 @@ def run_cca_all_rois(s, data_rois, domains, perm_schema, minvox, pooln=20, zscor
 
     return result_matrix, result_dict, pca_dict
 
-def run_cca_all_subjects(sub_list, domains, atlas_file, n_perms=1000, chunk_size=15, seed=0, pooln=20, zscore_opt=False, skip_roi=True, variance_part=False, save=True, suffix=''):
+def run_cca_all_subjects(sub_list, domains, atlas_file, n_perms=1000, chunk_size=15, seed=0, pooln=20, zscore_opt=False, skip_roi=True, variance_part=0, save=True, suffix=''):
     
     """
     Run canonical correlation for all subjects
@@ -278,7 +301,7 @@ def run_cca_all_subjects(sub_list, domains, atlas_file, n_perms=1000, chunk_size
     - pooln : int, number of parallelization processes; default = 20 
     - zscore_opt : bool, whether to z-score components after PCA or not; default = False
     - skip_roi : bool, how to deal with ROIs with n_voxels < n_predictors, if False add missing voxels using ROI mean signal, if True skip ROI; default = True
-    - variance_part : bool, whether to run variance partitioning version or not, if True, instead of single domains, all domains but one are iteratively used as models; default = False
+    - variance_part : int, n_perms to run variance partitioning (shuffling colums of single domain); default = 0, i.e. run single domain model
     - save : bool, whether to save results as npy files; default = True
     - suffix : str, foldername suffix to add to saving path; default = ''
     
@@ -319,9 +342,15 @@ def run_cca_all_subjects(sub_list, domains, atlas_file, n_perms=1000, chunk_size
         
         # Extract rois
         data_rois, n_rois, n_voxels = extract_roi(data, atlas)
+
+        # Establish 
         minvoxs = np.sort(list(n_voxels.values()))
-        minvox = minvoxs[np.argwhere(minvoxs >= np.max([v.shape[1] for v in domains.values()]))[0][0]]
         
+        if variance_part:
+            minvox = minvoxs[np.argwhere(minvoxs >= np.sum([v.shape[1] for v in domains.values()]))[0][0]]
+        else:
+            minvox = minvoxs[np.argwhere(minvoxs >= np.max([v.shape[1] for v in domains.values()]))[0][0]]
+
         print('- n_rois: {}'.format(n_rois))
         print('- n_voxels between {} and {}'.format(np.min(list(n_voxels.values())), np.max(list(n_voxels.values()))))
         print('- minvox used for PCA = {}'.format(minvox))

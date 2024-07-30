@@ -9,29 +9,32 @@ from nilearn import image
 from canonical_correlation_funcs import run_cca_all_subjects, pca_all_rois
 from stats_funcs import get_pvals_sub, get_pvals_group, save_nifti
 from scipy.stats import false_discovery_control as fdr
+from permutation_schema_func import permutation_schema
 
 if __name__ == '__main__': 
 
     # Set parameters
-    sub_list = np.array([12]) #, 13, 14, 15, 16, 17, 18, 19, 22, 32])
+    sub_list = np.array([13, 14, 15, 16, 17, 18, 19, 22, 32])
     n_subs = len(sub_list)
     global_path = '/home/laura.marras/Documents/Repositories/Action101/data/'
     
-    cca = False
-    full_model_opt = True
+    cca = True
+    full_model_opt = False
     n_perms = 0
     chunk_size = 15
     seed = 0
     atlas_file = 'Schaefer200'
-    pooln = 8
+    pooln = 30
     zscore_opt = False
     skip_roi = False
-    variance_part = False
-    suffix = '_pcanoz_fullmodel' #'_pca_variancepart' # '_pca_fullmodel' #
+    variance_part = 50
+    suffix = '_pca_variancepart' #'_pcanoz_fullmodel' #'_pca_variancepart' # '_pca_fullmodel' #
 
-    ss_stats = True
-    save = True
+    ss_stats = False
+    adjusted = False
+    save = False
     run_fdr = False
+
     group_stats = False
     maxT = False
 
@@ -42,7 +45,7 @@ if __name__ == '__main__':
     
     if full_model_opt:
         domains = full_model
-    
+
     n_doms = len(domains.keys())
 
     # Load Atlas
@@ -70,7 +73,7 @@ if __name__ == '__main__':
 
         for s, sub in enumerate(sub_list):
 
-            results_subs[s], pvals_subs[s] = get_pvals_sub(sub, adjusted=False, save=save, suffix=suffix, atlas_file=atlas_file, global_path=global_path)
+            results_subs[s], pvals_subs[s] = get_pvals_sub(sub, adjusted=adjusted, save=save, suffix=suffix, atlas_file=atlas_file, global_path=global_path)
                         
             # Build dictionaries
             res_dict = {r+1: results_subs[s,r,0,:].squeeze() for r in range(len(atlas_rois))}
