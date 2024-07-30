@@ -16,14 +16,15 @@ from scipy.stats import zscore
 
 from permutation_schema_func import permutation_schema
 
-def pca_single_roi(roi, n_comps=None):
+def pca_single_roi(roi, n_comps=None, zscore_opt=False):
     
     """
     Perform PCA of a single ROI
 
     Input:
     - roi : array, 2d matrix of shape = n_tpoints by n_voxels containing fMRI data 
-    - n_comps : number of components to keep, if None, keep all components; default = None
+    - n_comps : int, number of components to keep, if None, keep all components; default = None
+    - zscore_opt : bool, whether to z-score components after PCA or not; default = False
 
     Output:
     - roi_pca : array, 2d matrix of shape = n_tpoints by n_components containing fMRI data projected on the components
@@ -36,9 +37,10 @@ def pca_single_roi(roi, n_comps=None):
     explained_var = np.cumsum(pca.explained_variance_ratio_)
 
     # zscore
-    roi_zscore = zscore(roi_pca, axis=0)
+    if zscore_opt:
+        roi_pca = zscore(roi_pca, axis=0)
 
-    return roi_zscore, explained_var
+    return roi_pca, explained_var
 
 def canonical_correlation(X,Y, center=True):
     
@@ -186,7 +188,7 @@ def extract_roi(data, atlas):
     return data_rois, n_rois, n_voxels_rois
 
 @timeit
-def run_cca_all_rois(s, data_rois, domains, perm_schema, minvox, pooln=20, skip_roi=True, variance_part=False):
+def run_cca_all_rois(s, data_rois, domains, perm_schema, minvox, pooln=20, zscore_opt=False, skip_roi=True, variance_part=False):
     
     """
     Run canonical correlation for all ROIs using parallelization
@@ -198,6 +200,7 @@ def run_cca_all_rois(s, data_rois, domains, perm_schema, minvox, pooln=20, skip_
     - perm_schema : array, 2d matrix of shape = n_tpoints, n_perms; first row contains unshuffled indices --> contains indices for each permutation
     - minvox : int, number of components to keep in PCA, in this case it will be the number of voxels of the smallest ROI (provided that it is higher than the maximum number of predictors of the task domains)
     - pooln : int, number of parallelization processes; default = 20
+    - zscore_opt : bool, whether to z-score components after PCA or not; default = False
     - skip_roi : bool, how to deal with ROIs with n_voxels < n_predictors, if False add missing voxels using ROI mean signal, if True skip ROI; default = True
     - variance_part : bool, whether to run variance partitioning version or not, if True, instead of single domains, all domains but one are iteratively used as models; default = False
      
@@ -226,17 +229,12 @@ def run_cca_all_rois(s, data_rois, domains, perm_schema, minvox, pooln=20, skip_
     # Iterate over ROIs
     for r, roi in data_rois.items():
         
-        # PCA
-        if roi.shape[1] >= minvox:
-            roi_pca, pca_dict[r] = pca_single_roi(roi, n_comps=minvox)
-
-            # Run canoncorr for each ROI with parallelization and store results
-            result_pool = pool.apply_async(run_cca_single_roi, args=(roi_pca, perm_schema, domains, variance_part))
-            results_pool.append((r, result_pool))
-
-        else:
+        # Verify minimum number of voxels for each ROI
+        if roi.shape[1] < minvox:
+            
             if skip_roi:
                 print('- ROI {} voxels are {}, less than the max number of predictors!! This ROI will be discarded'.format(r, roi.shape[1]))
+                continue
             
             else:
                 # Add n voxels to reach min dimension by using ROI mean signal
@@ -246,13 +244,14 @@ def run_cca_all_rois(s, data_rois, domains, perm_schema, minvox, pooln=20, skip_
                 meanvox = np.mean(roi, axis=1)
                 voxelstoaddmat = np.tile(meanvox, (voxelstoadd, 1)).T
                 roi = np.hstack((roi, voxelstoaddmat))
+        
+        # PCA
+        roi_pca, pca_dict[r] = pca_single_roi(roi, n_comps=minvox, zscore_opt=zscore_opt)
 
-                # Continue with pca and cca
-                roi_pca, pca_dict[r] = pca_single_roi(roi, n_comps=minvox)
+        # Run canoncorr for each ROI with parallelization and store results
+        result_pool = pool.apply_async(run_cca_single_roi, args=(roi_pca, perm_schema, domains, variance_part))
+        results_pool.append((r, result_pool))
 
-                # Run canoncorr for each ROI with parallelization and store results
-                result_pool = pool.apply_async(run_cca_single_roi, args=(roi_pca, perm_schema, domains))
-                results_pool.append((r, result_pool))
     pool.close()
     
     # Unpack results
@@ -264,7 +263,7 @@ def run_cca_all_rois(s, data_rois, domains, perm_schema, minvox, pooln=20, skip_
 
     return result_matrix, result_dict, pca_dict
 
-def run_cca_all_subjects(sub_list, domains, atlas_file, n_perms=1000, chunk_size=15, seed=0, pooln=20, skip_roi=True, variance_part=False, save=True, suffix=''):
+def run_cca_all_subjects(sub_list, domains, atlas_file, n_perms=1000, chunk_size=15, seed=0, pooln=20, zscore_opt=False, skip_roi=True, variance_part=False, save=True, suffix=''):
     
     """
     Run canonical correlation for all subjects
@@ -276,7 +275,8 @@ def run_cca_all_subjects(sub_list, domains, atlas_file, n_perms=1000, chunk_size
     - n_perms : int, number of permutations (columns); default = 1000
     - chunk_size: int, size of chunks to be kept contiguous, in TR; default = 15 (30s)
     - seed: int, seed for the random permutation; default = 0
-    - pooln : int, number of parallelization processes; default = 20
+    - pooln : int, number of parallelization processes; default = 20 
+    - zscore_opt : bool, whether to z-score components after PCA or not; default = False
     - skip_roi : bool, how to deal with ROIs with n_voxels < n_predictors, if False add missing voxels using ROI mean signal, if True skip ROI; default = True
     - variance_part : bool, whether to run variance partitioning version or not, if True, instead of single domains, all domains but one are iteratively used as models; default = False
     - save : bool, whether to save results as npy files; default = True
@@ -331,7 +331,7 @@ def run_cca_all_subjects(sub_list, domains, atlas_file, n_perms=1000, chunk_size
         perm_schema = permutation_schema(n_tpoints, n_perms=n_perms, chunk_size=chunk_size)
 
         # Run cca for each roi
-        result_matrix, result_dict, pca_dict = run_cca_all_rois(s, data_rois, domains, perm_schema, minvox, pooln=pooln, skip_roi=skip_roi, variance_part=variance_part)
+        result_matrix, result_dict, pca_dict = run_cca_all_rois(s, data_rois, domains, perm_schema, minvox, pooln=pooln, zscore_opt=zscore_opt, skip_roi=skip_roi, variance_part=variance_part)
         
         # Save
         if save:

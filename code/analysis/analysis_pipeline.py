@@ -13,25 +13,26 @@ from scipy.stats import false_discovery_control as fdr
 if __name__ == '__main__': 
 
     # Set parameters
-    sub_list = np.array([12, 13, 14, 15, 16, 17, 18, 19, 22, 32])
+    sub_list = np.array([12]) #, 13, 14, 15, 16, 17, 18, 19, 22, 32])
     n_subs = len(sub_list)
     global_path = '/home/laura.marras/Documents/Repositories/Action101/data/'
     
-    cca = False
-    full_model_opt = False
+    cca = True
+    full_model_opt = True
     n_perms = 0
     chunk_size = 15
     seed = 0
-    atlas_file = 'Schaefer100'
-    pooln = 20
+    atlas_file = 'Schaefer200'
+    pooln = 8
+    zscore_opt = False
     skip_roi = False
-    variance_part = True
-    suffix = '_pca_variancepart' # '_pca_fullmodel' #
+    variance_part = False
+    suffix = '_pcanoz_fullmodel' #'_pca_variancepart' # '_pca_fullmodel' #
 
     ss_stats = False
     save = True
     run_fdr = False
-    group_stats = True
+    group_stats = False
     maxT = False
 
     # Load task and Create Full model
@@ -55,7 +56,7 @@ if __name__ == '__main__':
         print('Starting CCA')
         
         # Run CCA for all subjects
-        run_cca_all_subjects(sub_list, domains, atlas_file, n_perms, chunk_size, seed, pooln, skip_roi, variance_part, save, suffix)
+        run_cca_all_subjects(sub_list, domains, atlas_file, n_perms, chunk_size, seed, pooln, zscore_opt, skip_roi, variance_part, save, suffix)
 
         print('Finished CCA')
 
