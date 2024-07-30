@@ -17,7 +17,7 @@ if __name__ == '__main__':
     n_subs = len(sub_list)
     global_path = '/home/laura.marras/Documents/Repositories/Action101/data/'
     
-    cca = True
+    cca = False
     full_model_opt = False
     n_perms = 0
     chunk_size = 15
@@ -28,7 +28,7 @@ if __name__ == '__main__':
     variance_part = True
     suffix = '_pca_variancepart' # '_pca_fullmodel' #
 
-    ss_stats = True
+    ss_stats = False
     save = True
     run_fdr = False
     group_stats = True
@@ -48,6 +48,7 @@ if __name__ == '__main__':
     atlas = image.load_img('/data1/Action_teresi/CCA/atlas/Schaefer_7N_{}.nii.gz'.format(atlas_file[-3:]))
     atlas_rois = np.unique(atlas.get_fdata()).astype(int)
     atlas_rois = np.delete(atlas_rois, np.argwhere(atlas_rois==0))
+    x,y,z = atlas.get_fdata().shape
 
     # CCA
     if cca:
@@ -138,7 +139,7 @@ if __name__ == '__main__':
                 np.savez(path + 'CCA_res_group{}_{}'.format(suffix, atlas_file), results_group=results_group)  
                 
                 # Create nifti
-                image_final = np.zeros(atlas.get_fdata().shape)
+                image_final = np.squeeze(np.zeros((x,y,z,n_doms)))
 
                 for r, roi in enumerate(atlas_rois):
                     x_inds, y_inds, z_inds = np.where(atlas.get_fdata()==roi)
