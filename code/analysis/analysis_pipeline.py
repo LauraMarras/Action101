@@ -32,7 +32,7 @@ if __name__ == '__main__':
 
     ss_stats = False
     adjusted = False
-    save = False
+    save = True
     run_fdr = False
 
     group_stats = False
