@@ -14,7 +14,7 @@ from permutation_schema_func import permutation_schema
 if __name__ == '__main__': 
 
     # Set parameters
-    sub_list = np.array([13, 14, 15, 16, 17, 18, 19, 22, 32])
+    sub_list = np.array([12, 13, 14, 15, 16, 17, 18, 19, 22, 32])
     n_subs = len(sub_list)
     global_path = '/home/laura.marras/Documents/Repositories/Action101/data/'
     
