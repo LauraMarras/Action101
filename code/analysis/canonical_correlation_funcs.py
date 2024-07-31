@@ -350,7 +350,8 @@ def run_cca_all_subjects(sub_list, domains, atlas_file, n_perms=1000, chunk_size
             # minvox = minvoxs[np.argwhere(minvoxs >= np.sum([v.shape[1] for v in domains.values()]))[0][0]]
             minvox = np.sum([v.shape[1] for v in domains.values()])
         else:
-            minvox = minvoxs[np.argwhere(minvoxs >= np.max([v.shape[1] for v in domains.values()]))[0][0]]
+            #minvox = minvoxs[np.argwhere(minvoxs >= np.max([v.shape[1] for v in domains.values()]))[0][0]]
+            minvox = np.max([v.shape[1] for v in domains.values()])
 
         print('- n_rois: {}'.format(n_rois))
         print('- n_voxels between {} and {}'.format(np.min(list(n_voxels.values())), np.max(list(n_voxels.values()))))
