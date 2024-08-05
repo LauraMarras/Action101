@@ -179,12 +179,22 @@ if __name__ == '__main__':
     'social_connectivity': ['sociality', 'touch_1', 'target_2', 'target_3', 'multi_ag_vs_jointact_1', 'multi_ag_vs_jointact_2', 'ToM', 'people_present'],
     'emotion_expression': ['EBL', 'EIA', 'gesticolare', 'simbolic_gestures'],
     'linguistic_predictiveness': ['durativity', 'telicity', 'iterativity', 'dinamicity']}
+    
+    domains['conceptual_2'] = {
+    'space': ['context_0', 'context_1', 'context_2', 'inter_scale'],
+    'movement': ['eff_visibility', 'main_effector_0', 'main_effector_1', 'main_effector_2', 
+                 'main_effector_3', 'main_effector_4', 'main_effector_5', 'main_effector_6',
+                  'main_effector_7', 'main_effector_8', 'main_effector_9', 'main_effector_10'],
+    'agent_objective': ['target_0','target_1', 'agent_H_NH', 'tool_mediated', 'transitivity', 'touch_2'],
+    'social_connectivity': ['sociality', 'touch_1', 'target_2', 'target_3', 'multi_ag_vs_jointact_1', 'multi_ag_vs_jointact_2', 'ToM', 'people_present'],
+    'emotion_expression': ['EBL', 'EIA', 'gesticolare', 'simbolic_gestures'],
+    'linguistic_predictiveness': ['durativity', 'telicity', 'iterativity', 'dinamicity']}
 
     # Set to display all columns
     pd.set_option('display.max_columns', None)
 
     # Load csv files
-    data_path = 'Data/Carica101_PreprocessedTagging/tagging_carica101_'
+    data_path = '/home/laura.marras/Documents/Repositories/Action101/data/preprocessed_tagging/tagging_carica101_'
     df_all = pd.read_csv(data_path + 'all_preprocessed.csv', sep=',')
 
     # Select columns to OHE and to drop
@@ -228,14 +238,14 @@ if __name__ == '__main__':
     group_conv_us = convolve_HRF(group_upsampled, tr=0.05, hrf_p=8.6, hrf_q=0.547, dur=12)
 
     # Create domain matrices and save csv
-    out_path = 'Data/Carica101_Models/Domains/'
+    out_path = '/home/laura.marras/Documents/Repositories/Action101/data/models/domains/'
     domains_us_bin = get_domain_mat(group_upsampled, domains['conceptual_1'], out_path, 'group_us_binary')
     domains_ds_bin = get_domain_mat(group_downsampled, domains['conceptual_1'], out_path, 'group_ds_binary')
     domains_us_conv = get_domain_mat(group_conv_us, domains['conceptual_1'], out_path, 'group_us_conv')
-    domains_ds_conv = get_domain_mat(group_conv_ds, domains['conceptual_1'], out_path, 'group_ds_conv')
+    domains_ds_conv = get_domain_mat(group_conv_ds, domains['conceptual_2'], out_path, 'group_ds_conv')
 
     # Save all dframes
-    out_path = 'Data/Carica101_Models/group_'
+    out_path = '/home/laura.marras/Documents/Repositories/Action101/data/models/group_'
     group_conv_ds.to_csv(out_path + 'conv_ds.csv', sep=',', index_label=False)
     group_conv_us.to_csv(out_path + 'conv_us.csv', sep=',', index_label=False)
     group_upsampled.to_csv(out_path + 'bin_us.csv', sep=',', index_label=False)
