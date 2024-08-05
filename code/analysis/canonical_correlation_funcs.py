@@ -343,25 +343,26 @@ def run_cca_all_subjects(sub_list, domains, atlas_file, n_perms=1000, chunk_size
         # Extract rois
         data_rois, n_rois, n_voxels = extract_roi(data, atlas)
 
-        # Establish 
-        minvoxs = np.sort(list(n_voxels.values()))
-        
+        # Establish number of voxels minimum for ROIs and n_components for pca
         if variance_part:
-            # minvox = minvoxs[np.argwhere(minvoxs >= np.sum([v.shape[1] for v in domains.values()]))[0][0]]
             minvox = np.sum([v.shape[1] for v in domains.values()])
         else:
-            #minvox = minvoxs[np.argwhere(minvoxs >= np.max([v.shape[1] for v in domains.values()]))[0][0]]
             minvox = np.max([v.shape[1] for v in domains.values()])
 
         print('- n_rois: {}'.format(n_rois))
         print('- n_voxels between {} and {}'.format(np.min(list(n_voxels.values())), np.max(list(n_voxels.values()))))
         print('- minvox used for PCA = {}'.format(minvox))
+        print('- zscoring after PCA: {}'.format('on' if zscore_opt else 'off'))
 
         # Generate permutation schema
         n_tpoints = data.shape[-1]
         perm_schema = permutation_schema(n_tpoints, n_perms=n_perms, chunk_size=chunk_size)
-
+    
         # Run cca for each roi
+        print('\n- {} domains used for CCA: {}'.format(len(list(domains.keys())), list(domains.keys())))
+        print('- Used {} perms for variance partitioning'.format(variance_part))
+        print('\n- {} CPUs used'.format(pooln))
+
         result_matrix, result_dict, pca_dict = run_cca_all_rois(s, data_rois, domains, perm_schema, minvox, pooln=pooln, zscore_opt=zscore_opt, skip_roi=skip_roi, variance_part=variance_part)
         
         # Save
