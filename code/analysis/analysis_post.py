@@ -112,96 +112,47 @@ def clustering(results_group, n_clust_max, atlas_file):
     return silhouette_avg, clusters_labels
 
 if __name__ == '__main__': 
-
-    # Set parameters
-    sub_list = np.array([12, 13, 14, 15, 16, 17, 18, 19, 22, 32])
-    n_subs = len(sub_list)
-    
-    atlas_file = 'Schaefer200' # 'Schaefer100' # 'Schaefer200'
-    suffix = '_pca_variancepart'
-
-    # Variance partitioning
-    res_group = np.full((len(sub_list), 200, 5), np.nan)
-    res_group_full = np.full((len(sub_list), 200), np.nan)
-    for s, sub in enumerate(sub_list):
-        res_vp = np.load('/home/laura.marras/Documents/Repositories/Action101/data/cca_results/sub-{}{}/CCA_res_sub-{}_{}.npz'.format(sub, suffix, sub, atlas_file), allow_pickle=True)['result_matrix']
-        res_fm = np.load('/home/laura.marras/Documents/Repositories/Action101/data/cca_results/sub-{}{}/CCA_res_sub-{}_{}.npz'.format(sub, '_pcanoz_fullmodel', sub, atlas_file), allow_pickle=True)['result_matrix']
-
-        res_dom = res_fm - res_vp
-        res_group[s] = np.squeeze(res_dom[:,0])
-
-        res_group_full[s] = np.squeeze(res_fm[:,0])
-    
-    atlas = image.load_img('/data1/Action_teresi/CCA/atlas/Schaefer_7N_{}.nii.gz'.format(atlas_file[-3:]))
-    atlas_rois = np.unique(atlas.get_fdata()).astype(int)
-    atlas_rois = np.delete(atlas_rois, np.argwhere(atlas_rois==0))
-    x,y,z = atlas.get_fdata().shape
-    
-    image_final = np.squeeze(np.zeros((x,y,z,len(sub_list))))
-
-    for r, roi in enumerate(atlas_rois):
-        x_inds, y_inds, z_inds = np.where(atlas.get_fdata()==roi)
-        
-        image_final[x_inds, y_inds, z_inds] = res_group_full[:, r]
-
-    img = image.new_img_like(atlas, image_final, affine=atlas.affine, copy_header=False)
-    img.to_filename('/data1/Action_teresi/CCA/cca_results/group/CCA_res_fullmodel_{}.nii'.format(atlas_file))
-
-    
-    for dom in range(5):
-        image_final = np.squeeze(np.zeros((x,y,z,len(sub_list))))
-
-        for r, roi in enumerate(atlas_rois):
-            x_inds, y_inds, z_inds = np.where(atlas.get_fdata()==roi)
-            
-            image_final[x_inds, y_inds, z_inds] = res_group[:, r, dom]
-
-        img = image.new_img_like(atlas, image_final, affine=atlas.affine, copy_header=False)
-        img.to_filename('/data1/Action_teresi/CCA/cca_results/group/CCA_res_dom{}_{}.nii'.format(dom+1, atlas_file))
-
-    print('')
-    
     
     # Clustering
-    # n_clust_max=10
-    # results_group = np.load('/home/laura.marras/Documents/Repositories/Action101/data/cca_results/group/CCA_res_group{}_{}.npz'.format(suffix, atlas_file), allow_pickle=True)['results_group']
-    # silhouette_avg, clusters_labels = clustering(results_group, n_clust_max, atlas_file)
+    n_clust_max=10
+    results_group = np.load('/home/laura.marras/Documents/Repositories/Action101/data/cca_results/group/CCA_res_group{}_{}.npz'.format(suffix, atlas_file), allow_pickle=True)['results_group']
+    silhouette_avg, clusters_labels = clustering(results_group, n_clust_max, atlas_file)
 
-    # mds = MDS().fit_transform(results_group)
+    mds = MDS().fit_transform(results_group)
 
     # Plot
-    # if plot_clust:
-    #     for clust in range(clusters_labels.shape[0]):
-    #         plt.figure()
-    #         scatt = plt.scatter(mds[:,0], mds[:,1], c=clusters_labels[clust])
-    #         plt.legend(*scatt.legend_elements(), loc='lower right', title='Clusters', ncol=2, frameon=False, borderpad=-1, labelspacing=0.1, borderaxespad=0.1, columnspacing=0.1, handletextpad=-0.5)
-    #         plt.title('Clustering ROIs')
-    #         plt.suptitle('Silhouette score for {} clusters = {}'.format(clust+2, silhouette_avg[clust]))
-    #         ax = plt.gca()
-    #         ax.spines['right'].set_visible(False)
-    #         ax.spines['top'].set_visible(False)
-    #         ax.spines['left'].set_visible(False)
-    #         ax.spines['bottom'].set_visible(False)
-    #         ax.axes.xaxis.set_visible(False)
-    #         ax.axes.yaxis.set_visible(False)
-    #         plt.savefig('/home/laura.marras/Documents/Repositories/Action101/data/cca_results/clustering/MDS_kmeans_{}clusters.png'.format(clust+2))
+    if plot_clust:
+        for clust in range(clusters_labels.shape[0]):
+            plt.figure()
+            scatt = plt.scatter(mds[:,0], mds[:,1], c=clusters_labels[clust])
+            plt.legend(*scatt.legend_elements(), loc='lower right', title='Clusters', ncol=2, frameon=False, borderpad=-1, labelspacing=0.1, borderaxespad=0.1, columnspacing=0.1, handletextpad=-0.5)
+            plt.title('Clustering ROIs')
+            plt.suptitle('Silhouette score for {} clusters = {}'.format(clust+2, silhouette_avg[clust]))
+            ax = plt.gca()
+            ax.spines['right'].set_visible(False)
+            ax.spines['top'].set_visible(False)
+            ax.spines['left'].set_visible(False)
+            ax.spines['bottom'].set_visible(False)
+            ax.axes.xaxis.set_visible(False)
+            ax.axes.yaxis.set_visible(False)
+            plt.savefig('/home/laura.marras/Documents/Repositories/Action101/data/cca_results/clustering/MDS_kmeans_{}clusters.png'.format(clust+2))
 
-    # # Load task models
-    # domains_list = ['space_movement', 'agent_objective', 'social_connectivity', 'emotion_expression', 'linguistic_predictiveness']
-    # domains = {d: np.loadtxt('/home/laura.marras/Documents/Repositories/Action101/data/models/domains/group_ds_conv_{}.csv'.format(d), delimiter=',', skiprows=1)[:, 1:] for d in domains_list}
-    # n_doms = len(domains.keys())
-    # n_predictors = np.sum([domains[d].shape[1] for d in domains_list])
-    # dom_combs = list(itertools.combinations(range(n_doms), 2))
-    # dom_combs_str = list(itertools.combinations(domains_list, 2))
+    # Load task models
+    domains_list = ['space', 'movement', 'agent_objective', 'social_connectivity', 'emotion_expression', 'linguistic_predictiveness']
+    domains = {d: np.loadtxt('/home/laura.marras/Documents/Repositories/Action101/data/models/domains/group_ds_conv_{}.csv'.format(d), delimiter=',', skiprows=1)[:, 1:] for d in domains_list}
+    n_doms = len(domains.keys())
+    n_predictors = np.sum([domains[d].shape[1] for d in domains_list])
+    dom_combs = list(itertools.combinations(range(n_doms), 2))
+    dom_combs_str = list(itertools.combinations(domains_list, 2))
 
     # Evaluate atlas ROIs dimension
-    #rois_nsubs, rois_nvoxs_subs = evaluate_nvoxels_rois(sub_list, atlas_file, n_predictors, print_opt=True, save=False)
+    rois_nsubs, rois_nvoxs_subs = evaluate_nvoxels_rois(sub_list, atlas_file, n_predictors, print_opt=True, save=False)
 
     # Load single subject results
-    #results = np.load('/home/laura.marras/Documents/Repositories/Action101/data/cca_results/group/CCA_res_allsubs{}_{}.npz'.format(suffix, atlas_file), allow_pickle=True)['results'][:,:,0,:]
-    #results_group = np.mean(results, axis=0)
+    results = np.load('/home/laura.marras/Documents/Repositories/Action101/data/cca_results/group/CCA_res_allsubs{}_{}.npz'.format(suffix, atlas_file), allow_pickle=True)['results'][:,:,0,:]
+    results_group = np.mean(results, axis=0)
 
     # Run t-tests
-    #ts, pvals = ttest_domains(results, dom_combs, dom_combs_str, fdr_opt=True, save=True)
+    ts, pvals = ttest_domains(results, dom_combs, dom_combs_str, fdr_opt=True, save=True)
 
-    # print('')
+    print('')
