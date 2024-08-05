@@ -153,8 +153,8 @@ def run_cca_single_roi(roi, perm_schema, domains, variance_part=0):
 
                 # For each permutation, build full model and shuffle columns of left-out domain
                 for vperm in range(1, vperm_schema.shape[1]):
-                    order = vperm_schema[:, vperm] # first colum contains original order (non-permuted)                 
-                    X = np.hstack([domains[dom] if dom!=domain else domains[dom][order,:] for dom in domains.keys()])
+                    vorder = vperm_schema[:, vperm] # first colum contains original order (non-permuted)                 
+                    X = np.hstack([domains[dom] if dom!=domain else domains[dom][vorder,:] for dom in domains.keys()])
                     
                     # Run cca 
                     r2_p[vperm-1], r2adj_p[vperm-1], _, _, _, _, _ = canonical_correlation(X, Y)
