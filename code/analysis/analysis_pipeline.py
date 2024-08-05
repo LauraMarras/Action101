@@ -19,18 +19,18 @@ if __name__ == '__main__':
     global_path = '/home/laura.marras/Documents/Repositories/Action101/data/'
     
     cca = True
-    full_model_opt = False
-    n_perms = 0
+    full_model_opt = True
+    n_perms = 1000
     chunk_size = 15
     seed = 0
     atlas_file = 'Schaefer200'
-    pooln = 30
+    pooln = 25
     zscore_opt = False
     skip_roi = False
-    variance_part = 50
-    suffix = '_pca_variancepart' #'_pcanoz_fullmodel' #'_pca_variancepart' # '_pca_fullmodel' #
+    variance_part = 0
+    suffix = '_pcanoz_fullmodel_6doms' #'_pcanoz_fullmodel' #'_pca_variancepart' # '_pca_fullmodel' #
 
-    ss_stats = False
+    ss_stats = True
     adjusted = False
     save = True
     run_fdr = False
@@ -39,7 +39,7 @@ if __name__ == '__main__':
     maxT = False
 
     # Load task and Create Full model
-    domains_list = ['space_movement', 'agent_objective', 'social_connectivity', 'emotion_expression', 'linguistic_predictiveness']
+    domains_list = ['space', 'movement', 'agent_objective', 'social_connectivity', 'emotion_expression', 'linguistic_predictiveness']
     domains = {d: np.loadtxt('/home/laura.marras/Documents/Repositories/Action101/data/models/domains/group_ds_conv_{}.csv'.format(d), delimiter=',', skiprows=1)[:, 1:] for d in domains_list}
     full_model = {'full_model': np.hstack([domains[d] for d in domains_list])}
     
