@@ -119,28 +119,23 @@ if __name__ == '__main__':
     atlas_file = 'Schaefer200'
     plot_clust = False
     suffix = '_pca_variancepart'
-    plot_tsne = True
+    plot_tsne = False
+    metric='cosine'
 
-    # Load group results
-    results_group = np.load('/home/laura.marras/Documents/Repositories/Action101/data/cca_results/group/CCA_res_group{}_{}.npz'.format(suffix, atlas_file), allow_pickle=True)['results_group']
+    # Load group results and filter ROIs with significant R2 for full model
+    pvals_group_fm = np.load('/home/laura.marras/Documents/Repositories/Action101/data/cca_results/group/CCA_res_group_pcanoz_fullmodel_6doms_{}_maxT.npz'.format(atlas_file), allow_pickle=True)['pvals_group']
+    ROIs_2keep = np.unique(np.where(np.squeeze(pvals_group_fm) < 0.05)[0])
+    results_group = np.load('/home/laura.marras/Documents/Repositories/Action101/data/cca_results/group/CCA_res_group{}_{}.npz'.format(suffix, atlas_file), allow_pickle=True)['results_group'][ROIs_2keep,:]
 
-    # Get ROIs distance matrix 
-    results_group_corr = pdist(results_group, metric='correlation')
-    results_group_cosine = pdist(results_group, metric='cosine')
 
     # tSNE
-    tsne = TSNE(random_state=0, metric='correlation')
-    tsne_basic = tsne.fit_transform(results_group)
+    tsne = TSNE(random_state=0, metric=metric, init='random', perplexity=5)
+    results_tsne = tsne.fit_transform(results_group)
 
-    tsne = TSNE(random_state=0, metric='precomputed', init='random')
-    tsne_corr = tsne.fit_transform(squareform(results_group_corr))
-    tsne_cosine = tsne.fit_transform(squareform(results_group_cosine))
-
-    # Plot
     if plot_tsne:
         plt.figure()
-        scatt = plt.scatter(tsne_cosine[:,0], tsne_cosine[:,1])
-        plt.title('tSNE on cosine distance btw ROIs R2')
+        scatt = plt.scatter(results_tsne[:,0], results_tsne[:,1])
+        plt.title('tSNE on {} distance btw  ROIs R2'.format(metric))
 
         ax = plt.gca()
         ax.spines['right'].set_visible(False)
@@ -149,8 +144,11 @@ if __name__ == '__main__':
         ax.spines['bottom'].set_visible(False)
         ax.axes.xaxis.set_visible(False)
         ax.axes.yaxis.set_visible(False)
-        plt.savefig('/home/laura.marras/Documents/Repositories/Action101/data/cca_results/clustering/tsne_cosine.png')
+        plt.savefig('/home/laura.marras/Documents/Repositories/Action101/data/cca_results/clustering/tsne_{}.png'.format(metric))
 
+    # Save
+    np.savetxt('/data1/Action_teresi/CCA/cca_results/group/CCA_res_group_filtered'.format(metric), results_group)
+    
     # Clustering
     n_clust_max=10
     silhouette_avg, clusters_labels = clustering(results_group, n_clust_max, atlas_file)
