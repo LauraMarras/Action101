@@ -35,15 +35,20 @@ def ttest_domains(results, dom_combs, dom_combs_str, fdr_opt=True, save=False):
 
     return ts, pvals
 
-def save_nifti(results, briks, atlas_file='Schaefer200', savepath=''):
+def save_nifti(results, briks, atlas_file='Schaefer200', savepath='', ROIsmask=[]):
+    
     atlas = image.load_img('/data1/Action_teresi/CCA/atlas/Schaefer_7N_{}.nii.gz'.format(atlas_file[-3:]))
     atlas_rois = np.unique(atlas.get_fdata()).astype(int)
     atlas_rois = np.delete(atlas_rois, np.argwhere(atlas_rois==0))
+
+    if len(ROIsmask) <= 0:
+        ROIsmask = atlas_rois
+
     x,y,z = atlas.get_fdata().shape
     
     image_final = np.squeeze(np.zeros((x,y,z,briks)))
 
-    for r, roi in enumerate(atlas_rois):
+    for r, roi in enumerate(ROIsmask):
         x_inds, y_inds, z_inds = np.where(atlas.get_fdata()==roi)
         
         image_final[x_inds, y_inds, z_inds] = results[:, r]
@@ -61,28 +66,27 @@ if __name__ == '__main__':
     domains_list = ['space', 'movement', 'agent_objective', 'social_connectivity', 'emotion_expression', 'linguistic_predictiveness']
     
     atlas_file = 'Schaefer200' # 'Schaefer100' # 'Schaefer200'
-    suffix = '_pca_variancepart'
-
     alpha = 0.05
 
     # Filter ROIs with significant R2 for full model
-    # pvals_group_fm = np.load('/home/laura.marras/Documents/Repositories/Action101/data/cca_results/group/CCA_res_group{}_{}'.format(suffix, atlas_file), allow_pickle=True)['pvals_group']
-    # ROIs_2keep = np.unique(np.where(np.squeeze(pvals_group_fm) < alpha)[0])
+    pvals_group_fm = np.load('/home/laura.marras/Documents/Repositories/Action101/data/cca_results/group/CCA_res_group_pcanoz_fullmodel_6doms_{}_maxT.npz'.format(atlas_file), allow_pickle=True)['pvals_group']
+    ROIs_2keep = np.unique(np.where(np.squeeze(pvals_group_fm) < alpha)[0])
 
     # Load R2 from full model and variance partitioning, select first perm (true R), and significative ROIs 
-    results_vp = np.load('/home/laura.marras/Documents/Repositories/Action101/data/cca_results/group/CCA_res_allsubs_pca_variancepart_{}.npz'.format(atlas_file), allow_pickle=True)['results'][:, :, 0, :]
-    results_fm = np.load('/home/laura.marras/Documents/Repositories/Action101/data/cca_results/group/CCA_res_allsubs_pcanoz_fullmodel_{}.npz'.format(atlas_file), allow_pickle=True)['results'][:, :, 0, :]
+    results_vp = np.load('/home/laura.marras/Documents/Repositories/Action101/data/cca_results/group/CCA_res_allsubs_pca_variancepart_{}.npz'.format(atlas_file), allow_pickle=True)['results'][:, ROIs_2keep, 0, :]
+    results_fm = np.load('/home/laura.marras/Documents/Repositories/Action101/data/cca_results/group/CCA_res_allsubs_pcanoz_fullmodel_{}.npz'.format(atlas_file), allow_pickle=True)['results'][:, ROIs_2keep, 0, :]
    
     # Get R2 for single domain (subtract shuffled models R2 from full model R2)
     res_dom = np.squeeze(results_fm - results_vp)
 
-    # Get mean across subs
+    # Get mean across subs and concatenate to main matrix
     res_dom_mean = np.mean(res_dom, axis=0)
+    res_dom_final = np.concatenate((res_dom, np.expand_dims(res_dom_mean, axis=0)), axis=0)
 
     # Save nifti
-    for dom in range(5, res_dom.shape[-1]):
+    for dom in range(res_dom.shape[-1]):
         savepath = '/data1/Action_teresi/CCA/cca_results/group/'
-        save_nifti(res_dom[:,:,dom], len(sub_list), atlas_file, savepath+'CCA_res_{}_{}.nii'.format(domains_list[dom], atlas_file))
+        save_nifti(res_dom_final[:,:,dom], res_dom_final.shape[0], atlas_file, savepath+'CCA_res_{}_{}_f.nii'.format(domains_list[dom], atlas_file), ROIs_2keep+1)
         
     print('')
     
