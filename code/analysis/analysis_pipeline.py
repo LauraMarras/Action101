@@ -18,7 +18,7 @@ if __name__ == '__main__':
     n_subs = len(sub_list)
     global_path = '/home/laura.marras/Documents/Repositories/Action101/data/'
     
-    cca = True
+    cca = False
     full_model_opt = True
     n_perms = 1000
     chunk_size = 15
@@ -30,13 +30,13 @@ if __name__ == '__main__':
     variance_part = 0
     suffix = '_pcanoz_fullmodel_6doms' #'_pcanoz_fullmodel' #'_pca_variancepart' # '_pca_fullmodel' #
 
-    ss_stats = True
+    ss_stats = False
     adjusted = False
     save = True
     run_fdr = False
 
     group_stats = False
-    maxT = False
+    maxT = True
 
     # Load task and Create Full model
     domains_list = ['space', 'movement', 'agent_objective', 'social_connectivity', 'emotion_expression', 'linguistic_predictiveness']
@@ -125,6 +125,9 @@ if __name__ == '__main__':
 
                 # Rebuild pvals_dictionary
                 pvals_dict = {roi: pvals_array[r*n_doms:r*n_doms+n_doms] for r, roi in enumerate(atlas_rois)}
+
+            # Save numpy
+            np.savez('/home/laura.marras/Documents/Repositories/Action101/data/cca_results/group/CCA_res_group{}_{}{}'.format(suffix, atlas_file, correction), results_group=results_group, pvals_group=pvals_group)
 
             # Save as nifti
             folder_path = '/home/laura.marras/Documents/Repositories/Action101/data/cca_results/group/CCA_res_group{}_{}{}.nii'.format(suffix, atlas_file, correction) 
