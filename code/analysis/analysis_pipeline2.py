@@ -83,6 +83,10 @@ if __name__ == '__main__':
     res_dom_mean = np.mean(res_dom, axis=0)
     res_dom_final = np.concatenate((res_dom, np.expand_dims(res_dom_mean, axis=0)), axis=0)
 
+    # Save results 
+    np.savetxt('/data1/Action_teresi/CCA/cca_results/group/CCA_res_group_varpart_filtered.txt', res_dom_mean)
+    np.save('/home/laura.marras/Documents/Repositories/Action101/data/cca_results/group/CCA_res_allsubs_singledoms_filtered', res_dom_final)
+    
     # Save nifti
     for dom in range(res_dom.shape[-1]):
         savepath = '/data1/Action_teresi/CCA/cca_results/group/'
