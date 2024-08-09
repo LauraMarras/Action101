@@ -10,6 +10,10 @@ import itertools
 from utils.eval_kmeans import evalKMeans
 from matplotlib import pyplot as plt
 from scipy.spatial.distance import pdist, squareform
+import seaborn as sns
+from matplotlib.colors import LinearSegmentedColormap
+from matplotlib.lines import Line2D
+
 
 def evaluate_nvoxels_rois(sub_list, atlas_file, n_predictors, print_opt=True, save=False):
     
@@ -168,6 +172,40 @@ def create_ttest_nifti(ts, pvals, dom_combs, dom_combs_str):
 
         return
 
+def functional_conn(sub_list, atlas_file, rois_list):
+
+    # Init correlation matrix
+    corr_mats = np.full((len(sub_list), len(rois_list), len(rois_list)), np.nan)
+    
+    # Iterate over subjects
+    for s, sub in enumerate(sub_list):
+        
+        # Load data
+        data = image.load_img('/data1/ISC_101_setti/dati_fMRI_TORINO/sub-0{}/ses-AV/func/allruns_cleaned_sm6_SG.nii.gz'.format(sub)).get_fdata()
+        atlas = image.load_img('/data1/Action_teresi/CCA/atlas/sub-{}_{}_atlas_2orig.nii.gz'.format(sub, atlas_file)).get_fdata()
+        
+        # Extract rois
+        data_rois, n_rois, n_voxels = extract_roi(data, atlas)
+        tpoints = data_rois[1].shape[0]
+
+        # Init res mat
+        ROI_sub = np.full((len(rois_list), tpoints), np.nan)
+
+        # Iterate over ROIs within mask
+        for r, roi in enumerate(rois_list):
+            
+            roi_avg = np.mean(data_rois[roi], axis=1)
+            ROI_sub[r,:] = roi_avg
+        
+        # Get correlation matrix
+        distances = squareform(pdist(ROI_sub, metric='correlation'))
+        corr_mats[s] = distances
+
+    # Average across subs
+    corr_mat = np.mean(corr_mats, axis=0)
+    
+    return corr_mat
+
 if __name__ == '__main__': 
     
     # Set parameters
@@ -176,7 +214,8 @@ if __name__ == '__main__':
     plot_clust = False
     suffix = '_pca_variancepart'
     plot_tsne = False
-    metric='euclidean'
+    metric = 'euclidean'
+    plot_funcconn = False
 
     # Load group results and filter ROIs with significant R2 for full model
     pvals_group_fm = np.load('/home/laura.marras/Documents/Repositories/Action101/data/cca_results/group/CCA_res_group_pcanoz_fullmodel_6doms_{}_maxT.npz'.format(atlas_file), allow_pickle=True)['pvals_group']
@@ -187,9 +226,31 @@ if __name__ == '__main__':
     results_vp_avg = results_filtered_vp[-1,:,:]
     results_vp = results_filtered_vp[:-1,:,:]
 
+    # Get functional connectivity matrix for significant ROIs
+    # func_conn_mat = functional_conn(sub_list, atlas_file, ROIs_2keep+1)
+    
+    # # Save functional connectivity matrix
+    # np.save('/home/laura.marras/Documents/Repositories/Action101/data/func_connectivity_matrix_CCArois', func_conn_mat)
+    # np.savetxt('/data1/Action_teresi/CCA/func_connectivity_matrix_CCArois.txt', func_conn_mat)
+
+    # Load functional connectivity matrix
+    func_conn_mat = np.load('/home/laura.marras/Documents/Repositories/Action101/data/func_connectivity_matrix_CCArois.npy')
+
+    # Plot functional connectivity matrix
+    if plot_funcconn:
+        plt.figure(figsize=(15,12))
+        labels = np.loadtxt('/data1/Action_teresi/CCA/atlas/Schaefer_7N200_labels.txt', dtype=str)[ROIs_2keep]
+        labels_short = np.array([l[3:] for l in labels])
+        sns.heatmap(func_conn_mat, yticklabels=labels_short, xticklabels=labels_short, square=True)
+        plt.savefig('func_conn.png')
+
     # tSNE
-    tsne = TSNE(random_state=0, metric=metric, init='random', perplexity=5, n_iter=5000)
-    results_tsne = tsne.fit_transform(results_vp_avg)
+    tsne = TSNE(random_state=0, metric='precomputed', init='random', perplexity=5, n_iter=5000)
+    results_tsne = tsne.fit_transform(func_conn_mat)
+    
+    # tSNE
+    # tsne = TSNE(random_state=0, metric=metric, init='random', perplexity=5, n_iter=5000)
+    # results_tsne = tsne.fit_transform(results_vp_avg)
 
     if plot_tsne:
         plt.figure()
@@ -204,14 +265,16 @@ if __name__ == '__main__':
         ax.axes.xaxis.set_visible(False)
         ax.axes.yaxis.set_visible(False)
         plt.savefig('/home/laura.marras/Documents/Repositories/Action101/data/cca_results/clustering/tsne_{}_new.png'.format(metric))
-
-    # Save
-    np.savetxt('/data1/Action_teresi/CCA/cca_results/group/CCA_res_group_filtered', results_group)
     
     # Clustering
-    n_clust_max=5
-    silhouette_avg, clusters_labels = clustering(squareform(pdist(results_tsne, metric=metric)), n_clust_max, atlas_file)
-    clust = np.argmax(silhouette_avg)
+    # n_clust_max=5
+    # silhouette_avg, clusters_labels = clustering(squareform(pdist(results_tsne, metric=metric)), n_clust_max, atlas_file)
+    # clust = np.argmax(silhouette_avg)
+
+    # Clustering
+    # n_clust_max=15
+    # silhouette_avg, clusters_labels = clustering(results_tsne, n_clust_max, atlas_file)
+    # clust = np.argmax(silhouette_avg)
     
     # Plot
     if plot_clust:
@@ -242,8 +305,8 @@ if __name__ == '__main__':
         plt.savefig('/home/laura.marras/Documents/Repositories/Action101/data/cca_results/clustering/tsne_{}_kmeans_{}clusters.png'.format(metric, clust+2))
 
     # Save clustering res to nifti
-    clust_to_nifti = np.expand_dims(clusters_labels[clust], axis=0)
-    save_nifti(clust_to_nifti, 1, atlas_file, '/data1/Action_teresi/CCA/cca_results/group/CCA_tsne_euclidean_kmeans.nii.gz', ROIsmask=ROIs_2keep+1)
+    # clust_to_nifti = np.expand_dims(clusters_labels[clust], axis=0)
+    # save_nifti(clust_to_nifti, 1, atlas_file, '/data1/Action_teresi/CCA/cca_results/group/CCA_tsne_euclidean_kmeans.nii.gz', ROIsmask=ROIs_2keep+1)
 
     # Load task models
     domains_list = ['space', 'movement', 'agent_objective', 'social_connectivity', 'emotion_expression', 'linguistic_predictiveness']
@@ -254,7 +317,61 @@ if __name__ == '__main__':
     dom_combs_str = list(itertools.combinations(domains_list, 2))
     
     # Run t-tests
-    ts, pvals = ttest_rel_domains(results_vp, dom_combs, dom_combs_str, fdr_opt=True, save=True)
+    #ts, pvals = ttest_rel_domains(results_vp, dom_combs, dom_combs_str, fdr_opt=True, save=True)
     
     # Save nifti
-    create_ttest_nifti(ts, 1-pvals, dom_combs, dom_combs_str)
+    # create_ttest_nifti(ts, 1-pvals, dom_combs, dom_combs_str)
+
+    ts = np.load('/home/laura.marras/Documents/Repositories/Action101/data/cca_results/ttest/ttest_rel_cca.npz', allow_pickle=True)['tstat']
+    pvals = np.load('/home/laura.marras/Documents/Repositories/Action101/data/cca_results/ttest/ttest_rel_cca.npz', allow_pickle=True)['pvals']
+
+    doms_color = {'space': '#ff595e', 'movement':'#ff924c', 'agent_objective':'#ffca3a', 'social_connectivity':'#8ac926', 'emotion_expression':'#1982c4', 'linguistic_predictiveness':'#6a4c93'}
+    
+    for c, comb in enumerate(dom_combs_str):
+        
+        cmap = LinearSegmentedColormap.from_list('mycmap', [doms_color[comb[0]], doms_color[comb[1]], '#adb5bd'], N=3)
+    
+        color_coding = np.array([0 if t>0  else 1 for t in ts[:,c]])
+        color_coding[np.where(pvals[:,c]>0.05)] = '2'
+        
+        point_labels = np.array(['{}'.format(comb[0]) if t >0 else '{}'.format(comb[1]) for t in ts[:,c]])
+        point_labels[np.where(pvals[:,c]>0.05)] = 'ns'
+
+        # Load ROI labels
+        labels = np.loadtxt('/data1/Action_teresi/CCA/atlas/Schaefer_7N200_labels.txt', dtype=str)[ROIs_2keep]
+        hemispheres = np.array([0 if l[0]=='R' else 1 for l in labels])
+        labels_short = np.array([l[3:] for l in labels])
+        right = np.where(hemispheres==0)[0]
+        left = np.where(hemispheres)[0]
+
+        plt.figure(figsize=(9.6, 6.4))
+        scatt = plt.scatter(results_tsne[right,0], results_tsne[right,1], c=color_coding[right], cmap=cmap, marker='o')
+        scattL = plt.scatter(results_tsne[left,0], results_tsne[left,1], c=color_coding[left], cmap=cmap, marker='v')
+        
+        # Create legend
+
+        legend_elements = [Line2D([0], [0], color='w', markerfacecolor=doms_color[comb[0]], marker='o', label=comb[0]),
+                            Line2D([0], [0], color='w', markerfacecolor=doms_color[comb[1]], marker='o', label=comb[1]),
+                            Line2D([0], [0], color='w', markerfacecolor='#adb5bd', marker='o', label='ns'),
+                            Line2D([0], [0], color='w', markerfacecolor='k', marker='o', label='right'),
+                            Line2D([0], [0], color='w', markerfacecolor='k', marker='v', label='left')]
+                   
+        plt.legend(handles=legend_elements, loc='upper left', ncol=1, frameon=False, borderpad=-1, labelspacing=0.1, borderaxespad=0.1, columnspacing=0.1, handletextpad=-0.5)
+                
+        
+        plt.title('T-Test on tSNE space from {}\n{}'.format('functional connectivity', comb[0]+' vs '+comb[1]))
+        ax = plt.gca()
+        ax.spines['right'].set_visible(False)
+        ax.spines['top'].set_visible(False)
+        ax.spines['left'].set_visible(False)
+        ax.spines['bottom'].set_visible(False)
+        ax.axes.xaxis.set_visible(False)
+        ax.axes.yaxis.set_visible(False)
+
+        for i, txt in enumerate(labels_short):
+            ax.annotate(txt, (results_tsne[i,0]+0.5, results_tsne[i,1]+0.5), size='xx-small')
+
+        plt.savefig('/home/laura.marras/Documents/Repositories/Action101/data/cca_results/clustering/ttest_{}_vs_{}.png'.format(comb[0], comb[1]))
+
+
+        print('')
