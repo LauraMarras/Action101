@@ -377,7 +377,7 @@ def run_cca_all_subjects(condition, sub_list, domains, atlas_file, rois_to_inclu
         
         # Save
         if save:
-            folder_path = '/home/laura.marras/Documents/Repositories/Action101/data/cca_results/sub-{}{}/'.format(sub_str, suffix)
+            folder_path = '/home/laura.marras/Documents/Repositories/Action101/data/cca_results/{}/sub-{}{}/'.format(condition, sub_str, suffix)
             if not os.path.exists(folder_path):
                 os.makedirs(folder_path)
 
