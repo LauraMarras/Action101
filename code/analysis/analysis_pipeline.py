@@ -21,22 +21,22 @@ if __name__ == '__main__':
     n_subs = len(sub_list)
     global_path = '/home/laura.marras/Documents/Repositories/Action101/data/'
     
-    cca = False
+    cca = True
     full_model_opt = True
     n_perms = 1000
     chunk_size = 15
     seed = 0
     atlas_file = 'Schaefer200'
     rois_to_include = list(np.loadtxt('/data1/Action_teresi/CCA/cca_results/group/significantROIs_AV.txt').astype(int)) if condition != 'AV' else []
-    pooln = 25
+    pooln = 32
     zscore_opt = False
     skip_roi = False
-    variance_part = 0
-    suffix = '_pcanoz_fullmodel_6doms' #'_pcanoz_fullmodel' #'_pca_variancepart' # '_pca_fullmodel' #
+    variance_part = 0 if full_model_opt else 50
+    suffix = 'fullmodel' if full_model_opt else 'variancepart'
+    save = True
 
     ss_stats = False
     adjusted = False
-    save = True
     run_fdr = False
 
     group_stats = False
@@ -46,7 +46,6 @@ if __name__ == '__main__':
     domains_list = ['space', 'movement', 'agent_objective', 'social_connectivity', 'emotion_expression', 'linguistic_predictiveness']
     domains = {d: np.loadtxt('/home/laura.marras/Documents/Repositories/Action101/data/models/domains/group_ds_conv_{}.csv'.format(d), delimiter=',', skiprows=1)[:, 1:] for d in domains_list}
     full_model = {'full_model': np.hstack([domains[d] for d in domains_list])}
-    
     if full_model_opt:
         domains = full_model
 
@@ -63,7 +62,7 @@ if __name__ == '__main__':
         print('Starting CCA')
         
         # Run CCA for all subjects
-        run_cca_all_subjects(sub_list, domains, atlas_file, rois_to_include, n_perms, chunk_size, seed, pooln, zscore_opt, skip_roi, variance_part, save, suffix)
+        run_cca_all_subjects(condition, sub_list, domains, atlas_file, rois_to_include, n_perms, chunk_size, seed, pooln, zscore_opt, skip_roi, variance_part, save, suffix)
 
         print('Finished CCA')
 
