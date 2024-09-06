@@ -175,7 +175,7 @@ def run_cca_single_roi(roi, perm_schema, domains, variance_part=0):
 
     return results
 
-def extract_roi(data, atlas):
+def extract_roi(data, atlas, rois_to_include=[]):
     
     """
     Parcellize data into ROIs of given atlas
@@ -183,6 +183,7 @@ def extract_roi(data, atlas):
     Inputs:
     - data : array, 4d (or 3d) matrix of shape = x by y by z (by time) containing fMRI signal
     - atlas : array, 3d matrix of shape = x by y by z containing ROIs membership for each voxel
+    - rois_to_include : list, list of ROIs to be considered; default = [], i.e. include all atlas ROIs
 
     Outputs:
     - data_rois : dict, including for each ROI within atlas, 2d (or 1d) matrix of shape = voxels (by time) containing fMRI signal of each voxel within ROI
@@ -190,9 +191,15 @@ def extract_roi(data, atlas):
     - n_voxels_rois : dict, including for each ROI within atlas, the number of voxels within ROI
     """
     
-    # Get list and number of ROIs in atlas
-    rois = np.unique(atlas)
-    rois = np.delete(rois, np.argwhere(rois==0))
+    # Get list of ROIs in atlas
+    rois_atlas = np.unique(atlas)
+    rois_atlas = np.delete(rois_atlas, np.argwhere(rois_atlas==0))
+
+    # If indicated, select only specified ROIs 
+    if len(rois_to_include)<=0:
+        rois_to_include = list(rois_atlas)
+    
+    rois = np.array([r for r in rois_to_include if r in list(rois_atlas)])
     n_rois = len(rois)
 
     # Initialize dictionaries
@@ -286,15 +293,17 @@ def run_cca_all_rois(s, data_rois, domains, perm_schema, minvox, pooln=20, zscor
 
     return result_matrix, result_dict, pca_dict
 
-def run_cca_all_subjects(sub_list, domains, atlas_file, n_perms=1000, chunk_size=15, seed=0, pooln=20, zscore_opt=False, skip_roi=True, variance_part=0, save=True, suffix=''):
+def run_cca_all_subjects(condition, sub_list, domains, atlas_file, rois_to_include=[], n_perms=1000, chunk_size=15, seed=0, pooln=20, zscore_opt=False, skip_roi=True, variance_part=0, save=True, suffix=''):
     
     """
     Run canonical correlation for all subjects
     
     Inputs:
+    - condition: str, indicates condition, i.e. fMRI session the subjects were assigned to
     - sub_list : array, 1d array containing sub numbers for which to run CCA
     - domains : dict, including domain names as keys and domain regressors as values
     - atlas_file : str, filename of atlas to use
+    - rois_to_include : list, list of ROIs to be considered; default = [], i.e. include all atlas ROIs
     - n_perms : int, number of permutations (columns); default = 1000
     - chunk_size: int, size of chunks to be kept contiguous, in TR; default = 15 (30s)
     - seed: int, seed for the random permutation; default = 0
@@ -337,11 +346,11 @@ def run_cca_all_subjects(sub_list, domains, atlas_file, n_perms=1000, chunk_size
         print('\n- Atlas: {}'.format(atlas_file))
 
         # Load data
-        data = image.load_img('/data1/ISC_101_setti/dati_fMRI_TORINO/sub-0{}/ses-AV/func/allruns_cleaned_sm6_SG.nii.gz'.format(sub)).get_fdata()
+        data = image.load_img('/data1/ISC_101_setti/dati_fMRI_TORINO/sub-0{}/ses-{}/func/allruns_cleaned_sm6_SG.nii.gz'.format(sub, condition)).get_fdata()
         atlas = image.load_img('/data1/Action_teresi/CCA/atlas/sub-{}_{}_atlas_2orig.nii.gz'.format(sub, atlas_file)).get_fdata()
         
         # Extract rois
-        data_rois, n_rois, n_voxels = extract_roi(data, atlas)
+        data_rois, n_rois, n_voxels = extract_roi(data, atlas, rois_to_include)
 
         # Establish number of voxels minimum for ROIs and n_components for pca
         if variance_part:
