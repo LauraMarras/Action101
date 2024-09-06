@@ -12,9 +12,12 @@ from scipy.stats import false_discovery_control as fdr
 from permutation_schema_func import permutation_schema
 
 if __name__ == '__main__': 
+    
+    condition = 'vid'
 
     # Set parameters
-    sub_list = np.array([12, 13, 14, 15, 16, 17, 18, 19, 22, 32])
+    sub_lists = {'AV': np.array([12, 13, 14, 15, 16, 17, 18, 19, 22, 32]), 'vid': np.array([20, 21, 23, 24, 25, 26, 28, 29, 30, 31]), 'aud': np.array([3, 4, 5, 6, 7, 8, 9, 10, 11, 27])}
+    sub_list = sub_lists[condition]
     n_subs = len(sub_list)
     global_path = '/home/laura.marras/Documents/Repositories/Action101/data/'
     
@@ -24,6 +27,7 @@ if __name__ == '__main__':
     chunk_size = 15
     seed = 0
     atlas_file = 'Schaefer200'
+    rois_to_include = list(np.loadtxt('/data1/Action_teresi/CCA/cca_results/group/significantROIs_AV.txt').astype(int)) if condition != 'AV' else []
     pooln = 25
     zscore_opt = False
     skip_roi = False
@@ -59,7 +63,7 @@ if __name__ == '__main__':
         print('Starting CCA')
         
         # Run CCA for all subjects
-        run_cca_all_subjects(sub_list, domains, atlas_file, n_perms, chunk_size, seed, pooln, zscore_opt, skip_roi, variance_part, save, suffix)
+        run_cca_all_subjects(sub_list, domains, atlas_file, rois_to_include, n_perms, chunk_size, seed, pooln, zscore_opt, skip_roi, variance_part, save, suffix)
 
         print('Finished CCA')
 
