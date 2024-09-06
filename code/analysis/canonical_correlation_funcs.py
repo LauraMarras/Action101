@@ -330,24 +330,25 @@ def run_cca_all_subjects(condition, sub_list, domains, atlas_file, rois_to_inclu
     
     # Iterate over subjects
     for s, sub in enumerate(sub_list):
-        
+        sub_str = str(sub) if len(str(sub))>=2 else '0'+str(sub)
+
         # Print output to txt file
-        log_path = '/home/laura.marras/Documents/Repositories/Action101/data/cca_results/sub-{}{}/logs/'.format(sub, suffix)
+        log_path = '/home/laura.marras/Documents/Repositories/Action101/data/cca_results/sub-{}{}/logs/'.format(sub_str, suffix)
         if not os.path.exists(log_path):
             os.makedirs(log_path)
         
-        logfile = open('{}log_cca_sub-{}_{}.txt'.format(log_path, sub, atlas_file), 'w')
+        logfile = open('{}log_cca_sub-{}_{}.txt'.format(log_path, sub_str, atlas_file), 'w')
         sys.stdout = logfile
 
         print(datetime.now())
-        print('CCA of sub-{}'.format(sub))
+        print('CCA of sub-{}'.format(sub_str))
         print('- n_perms: {}'.format(n_perms))
         print('- seed: {}'.format(seed))
         print('\n- Atlas: {}'.format(atlas_file))
 
         # Load data
-        data = image.load_img('/data1/ISC_101_setti/dati_fMRI_TORINO/sub-0{}/ses-{}/func/allruns_cleaned_sm6_SG.nii.gz'.format(sub, condition)).get_fdata()
-        atlas = image.load_img('/data1/Action_teresi/CCA/atlas/sub-{}_{}_atlas_2orig.nii.gz'.format(sub, atlas_file)).get_fdata()
+        data = image.load_img('/data1/ISC_101_setti/dati_fMRI_TORINO/sub-0{}/ses-{}/func/allruns_cleaned_sm6_SG.nii.gz'.format(sub_str, condition)).get_fdata()
+        atlas = image.load_img('/data1/Action_teresi/CCA/atlas/sub-{}_{}_atlas_2orig.nii.gz'.format(sub_str, atlas_file)).get_fdata()
         
         # Extract rois
         data_rois, n_rois, n_voxels = extract_roi(data, atlas, rois_to_include)
@@ -376,11 +377,11 @@ def run_cca_all_subjects(condition, sub_list, domains, atlas_file, rois_to_inclu
         
         # Save
         if save:
-            folder_path = '/home/laura.marras/Documents/Repositories/Action101/data/cca_results/sub-{}{}/'.format(sub, suffix)
+            folder_path = '/home/laura.marras/Documents/Repositories/Action101/data/cca_results/sub-{}{}/'.format(sub_str, suffix)
             if not os.path.exists(folder_path):
                 os.makedirs(folder_path)
 
-            np.savez('{}CCA_res_sub-{}_{}'.format(folder_path, sub, atlas_file), result_matrix=result_matrix, result_dict=result_dict, pca_dict=pca_dict)
+            np.savez('{}CCA_res_sub-{}_{}'.format(folder_path, sub_str, atlas_file), result_matrix=result_matrix, result_dict=result_dict, pca_dict=pca_dict)
         
         # Close textfile
         logfile.close()
