@@ -85,6 +85,7 @@ if __name__ == '__main__':
 
     # Save results 
     np.savetxt('/data1/Action_teresi/CCA/cca_results/group/CCA_res_group_varpart_filtered.txt', res_dom_mean)
+    np.savetxt('/data1/Action_teresi/CCA/cca_results/group/significantROIs_AV.txt', ROIs_2keep+1)
     np.save('/home/laura.marras/Documents/Repositories/Action101/data/cca_results/group/CCA_res_allsubs_singledoms_filtered', res_dom_final)
     
     # Save nifti
