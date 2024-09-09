@@ -288,8 +288,17 @@ def run_cca_all_rois(s, data_rois, domains, perm_schema, minvox, pooln=20, zscor
     for result_pool in results_pool:
         njob = result_pool[1]._job - (s*n_rois)
         roi_n = result_pool[0]
-        result_matrix[njob, :, :, :] = result_pool[1].get()
-        result_dict[roi_n] = result_pool[1].get()
+
+        try:
+            roi_cca = result_pool[1].get()
+
+        except np.linalg.LinAlgError:
+            print('LinAlgError found for ROI_{}, njob = {}. Re-running CCA outside pool'.format(roi_n, njob))
+            roi_pca_ex, _ = pca_single_roi(data_rois[roi_n], minvox, zscore_opt)
+            roi_cca = run_cca_single_roi(roi_pca_ex, perm_schema, domains, variance_part)
+
+        result_matrix[njob, :, :, :] = roi_cca
+        result_dict[roi_n] = roi_cca
 
     return result_matrix, result_dict, pca_dict
 
@@ -382,7 +391,7 @@ def run_cca_all_subjects(condition, sub_list, domains, atlas_file, rois_to_inclu
                 os.makedirs(folder_path)
 
             np.savez('{}CCA_res_sub-{}_{}'.format(folder_path, sub_str, atlas_file), result_matrix=result_matrix, result_dict=result_dict, pca_dict=pca_dict)
-        
+
         # Close textfile
         logfile.close()
     
