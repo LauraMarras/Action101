@@ -211,7 +211,7 @@ if __name__ == '__main__':
     # Set parameters
     sub_list = np.array([12, 13, 14, 15, 16, 17, 18, 19, 22, 32])
     atlas_file = 'Schaefer200'
-    plot_clust = False
+    plot_clust = True
     suffix = '_pca_variancepart'
     plot_tsne = False
     metric = 'euclidean'
@@ -267,9 +267,11 @@ if __name__ == '__main__':
         plt.savefig('/home/laura.marras/Documents/Repositories/Action101/data/cca_results/clustering/tsne_{}_new.png'.format(metric))
     
     # Clustering
-    # n_clust_max=5
-    # silhouette_avg, clusters_labels = clustering(squareform(pdist(results_tsne, metric=metric)), n_clust_max, atlas_file)
-    # clust = np.argmax(silhouette_avg)
+    n_clust_max=5
+    silhouette_avg, clusters_labels = clustering(squareform(pdist(results_tsne, metric=metric)), n_clust_max, atlas_file)
+    clust = np.argmax(silhouette_avg)
+    cl_cols = ['#fdbf6f','#ff7f00','#cab2d6','#6a3d9a','#ffff99']
+    clust_colors=np.array([cl_cols[c-1] for c in clusters_labels[clust].astype(int)])
 
     # Clustering
     # n_clust_max=15
@@ -286,10 +288,21 @@ if __name__ == '__main__':
         left = np.where(hemispheres)[0]
 
         plt.figure(figsize=(9.6, 6.4))
-        scatt = plt.scatter(results_tsne[right,0], results_tsne[right,1], c=clusters_labels[clust, right], marker='o')
-        scattL = plt.scatter(results_tsne[left,0], results_tsne[left,1], c=clusters_labels[clust, left], marker='v')
-        plt.legend(*scattL.legend_elements(), loc='lower right', title='Clusters', ncol=2, frameon=False, borderpad=-1, labelspacing=0.1, borderaxespad=0.1, columnspacing=0.1, handletextpad=-0.5)
-        plt.title('Clustering ROIs on tSNE space from {}'.format(metric))
+        scatt = plt.scatter(results_tsne[right,0], results_tsne[right,1], c=clust_colors[right], marker='o')
+        scattL = plt.scatter(results_tsne[left,0], results_tsne[left,1], c=clust_colors[left], marker='v')
+
+        # Create legend
+        legend_elements = [Line2D([0], [0], color='w', markerfacecolor=cl_cols[0], marker='o', label=1),
+                            Line2D([0], [0], color='w', markerfacecolor=cl_cols[1], marker='o', label=2),
+                            Line2D([0], [0], color='w', markerfacecolor=cl_cols[2], marker='o', label=3),
+                            Line2D([0], [0], color='w', markerfacecolor=cl_cols[3], marker='o', label=4),
+                            Line2D([0], [0], color='w', markerfacecolor=cl_cols[4], marker='o', label=5),
+                            Line2D([0], [0], color='w', markerfacecolor='k', marker='o', label='right'),
+                            Line2D([0], [0], color='w', markerfacecolor='k', marker='v', label='left')]
+                                    
+
+        plt.legend(handles=legend_elements, loc='lower right', title='Clusters', ncol=2, frameon=False, borderpad=-1, labelspacing=0.1, borderaxespad=0.1, columnspacing=0.1, handletextpad=-0.5)
+        plt.title('Clustering ROIs on tSNE space from functional connectivity distance matrix')
         plt.suptitle('Silhouette score for {} clusters = {}'.format(clust+2, silhouette_avg[clust]))
         ax = plt.gca()
         ax.spines['right'].set_visible(False)
@@ -302,7 +315,7 @@ if __name__ == '__main__':
         for i, txt in enumerate(labels_short):
             ax.annotate(txt, (results_tsne[i,0]+0.5, results_tsne[i,1]+0.5), size='xx-small')
 
-        plt.savefig('/home/laura.marras/Documents/Repositories/Action101/data/cca_results/clustering/tsne_{}_kmeans_{}clusters.png'.format(metric, clust+2))
+        plt.savefig('/home/laura.marras/Documents/Repositories/Action101/data/cca_results/clustering/tsne_{}_kmeans_{}clusters_newcolors.png'.format(metric, clust+2), dpi=300)
 
     # Save clustering res to nifti
     # clust_to_nifti = np.expand_dims(clusters_labels[clust], axis=0)
