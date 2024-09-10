@@ -90,56 +90,77 @@ def get_pvals(results):
 
     return pvals
 
-def get_pvals_sub(sub, adjusted=True, save=True, suffix='', atlas_file='Schaefer200', global_path=None):
+def get_pvals_sub(condition, sub, adjusted=True, save=True, suffix='', atlas_file='Schaefer200', global_path=None, save_nifti_opt=False):
 
     """
     Get p values for each subject (each permutation and each domain)
     
     Inputs:
-    - sub : int, sub number
+    - condition : str, indicates condition, i.e. fMRI session the subjects were assigned to
+    - sub : str, sub number
     - adjusted : bool, whether to get adjusted R2 or not adjusted R2; default=True (get adjusted)
     - save : bool, whether to save single subject's results; default=True
     - suffix : str, default=''
     - atlas_file : str, default 'Schaefer200'
     - global_path : str, default = None
+    - save_nifti_opt : bool, whether to create nifti with results or not; default=False
 
     Outputs:
-    - res_sub_dict : dict, containing ROIs as keys and R2 results as values (2d array of shape = n_perms by n_doms)
-    - pvals_sub : dict, containing ROIs as keys and pvals as values (2d array of shape = n_perms by n_doms)
+    - res_sub_mat : array, containing R2 results for each ROI, perm and domain (3d array of shape = n_rois by n_perms by n_doms)
+    - pvals_sub : array, containing pvalues for each ROI, perm and domain (3d array of shape = n_rois by n_perms by n_doms)
+    - rois : list, containing ROIs
 
     Calls:
     - get_pvals()
+    - save_nifti()
     """
 
     if global_path is None: global_path = os.getcwd()
 
     # Load R2 results of single subject
-    res_sub = np.load('{}cca_results/sub-{}{}/CCA_res_sub-{}_{}.npz'.format(global_path,sub, suffix, sub, atlas_file), allow_pickle=True)['result_dict'].item()
-    n_rois = len(res_sub.keys())
-    n_perms = res_sub[1].shape[1]
-    n_doms = res_sub[1].shape[2]
+    res_sub = np.load('{}cca_results/{}/sub-{}/{}/CCA_res_sub-{}_{}.npz'.format(global_path, condition, sub, suffix, sub, atlas_file), allow_pickle=True)['result_dict'].item()
+    rois = list(res_sub.keys())
+    n_rois = len(rois)
+    n_perms = res_sub[rois[0]].shape[1]
+    n_doms = res_sub[rois[0]].shape[2]
 
-    # Initialize dictionaries
-    pvals_sub = np.full((n_rois, n_perms, n_doms), np.nan)
+    # Initialize results matrices and dictionaries
     res_sub_mat = np.full((n_rois, n_perms, n_doms), np.nan)
+    pvals_sub_mat = np.full((n_rois, n_perms, n_doms), np.nan)
+    res_sub_dict = {}
+    pvals_sub_dict = {}
 
     rind = 1 if adjusted else 0
     
     # Iterate over ROIs and get R2 results and calculate p-values
-    for r, roi in enumerate(res_sub.keys()):
-        res_roi = res_sub[roi][rind,:,:]
-        pvals_sub[r] = np.array([get_pvals(res_roi[:,d]) for d in range(res_roi.shape[-1])]).T
+    for r, roi in enumerate(rois):
+        res_roi = res_sub[roi][rind,:,:] # shape n_perms by n_doms 
+        pvals_roi = np.array([get_pvals(res_roi[:,d]) for d in range(res_roi.shape[-1])]).T
+        
+        # Assign to results matrix and dict
         res_sub_mat[r] = res_roi
+        pvals_sub_mat[r] = pvals_roi
+        res_sub_dict[roi] = res_roi[0]
+        pvals_sub_dict[roi] = pvals_roi[0]
 
     # Save results
     if save:
-        path = '{}/cca_results/sub-{}{}/'.format(global_path,sub,suffix)
+        path = '{}cca_results/{}/sub-{}/{}/'.format(global_path, condition, sub, suffix)
         if not os.path.exists(path):
             os.makedirs(path)
         
-        np.savez(path + 'CCA_stats_sub-{}_{}'.format(sub, atlas_file), pvals_sub=pvals_sub, res_sub_dict=res_sub_mat)  
+        np.savez(path + 'CCA_R2{}_pvals_sub-{}_{}'.format('adj' if adjusted else '', sub, atlas_file),  res_sub_mat=res_sub_mat, pvals_sub_mat=pvals_sub_mat, rois_order=rois)  
 
-    return res_sub_mat, pvals_sub
+    # Create nifti
+    if save_nifti_opt:
+        path = '{}cca_results/{}/sub-{}/{}/'.format(global_path, condition, sub, suffix)
+        if not os.path.exists(path):
+            os.makedirs(path)
+
+        atlas = image.load_img('/data1/Action_teresi/CCA/atlas/Schaefer_7N_{}.nii.gz'.format(atlas_file[-3:]))
+        image_final = save_nifti(atlas, n_doms, res_sub_dict, pvals_sub_dict, rois, path+'CCA_R2{}_pvals_sub-{}_{}'.format('adj' if adjusted else '', sub, atlas_file))
+
+    return res_sub_mat, pvals_sub_mat, rois
 
 def get_pval_pareto(results, tail_percentile=0.9, plot=None):
 
@@ -226,18 +247,22 @@ def fisher_sum(pvals_all_subs):
 
     return pval, t
 
-def get_pvals_group(rois, pvals_subs, res_subs, maxT=False, save=True, suffix='',global_path=''):
+def get_pvals_group(condition, rois, pvals_subs, res_subs, maxT=False, save=True, suffix='', atlas_file='Schaefer200', global_path=None, save_nifti_opt=False):
 
     """
     Get p values at group level (each permutation and each domain)
     
     Inputs:
+    - condition : str, indicates condition, i.e. fMRI session the subjects were assigned to
     - rois : list or array of ints or strings, list of ROIs (keys of single subject results)
     - pvals_subs : array, 4d array of shape = n_subs by n_rois by n_perms by n_doms
     - res_subs : array, 4d array of shape = n_subs by n_rois by n_perms by n_doms
     - maxT : bool, whether to correct for multiple comparisons using max-T correction; default=False
     - save : bool, whether to save group results; default=True
     - suffix : str, suffix; default = ''
+    - atlas_file : str, default 'Schaefer200'
+    - global_path : str, default = None
+    - save_nifti_opt : bool, whether to create nifti with results or not; default=False
 
     Outputs:
     - results_group : dict, containing ROIs as keys and mean R2 results of non permuted data as values (1d array of shape = n_doms)
@@ -248,16 +273,20 @@ def get_pvals_group(rois, pvals_subs, res_subs, maxT=False, save=True, suffix=''
     - get_pval_pareto()
     """
     
+    if global_path is None: global_path = os.getcwd()
+
     # Get dimensions
     n_subs, n_rois, n_perms, n_doms = res_subs.shape
     
     # Aggregate results across subs by averaging real r
     results_group = np.mean(res_subs, axis=0)[:,0,:]
+    results_group_dict = {roi: results_group[r,:] for r, roi in enumerate(rois)}
     
-    # Initialize pvals matrix
+    # Initialize pvals matrix and dict
     aggregated_pvals = np.empty((n_rois, n_perms, n_doms))
     aggregated_stats = np.empty((n_rois, n_perms, n_doms))
     pvals_group = np.empty((n_rois, n_doms))
+    pvals_group_dict = {}
 
     # Iterate over ROIs
     for r, roi in enumerate(rois):
@@ -280,18 +309,28 @@ def get_pvals_group(rois, pvals_subs, res_subs, maxT=False, save=True, suffix=''
                 pvals_roi_dom = aggregated_stats[r,:,d]
 
             pvals_group[r,d] = np.array(get_pval_pareto(pvals_roi_dom))
+        pvals_group_dict[roi] = pvals_group[r,:]
 
     # Save results
     if save:
-        path = global_path + 'cca_results/group/'
+        path = '{}cca_results/{}/group/{}/'.format(global_path, condition, suffix)
         if not os.path.exists(path):
             os.makedirs(path)
         
-        np.savez(path + 'CCA_res_group{}{}'.format(suffix, '_maxT' if maxT else ''), pvals_group=pvals_group, results_group=results_group)  
+        np.savez('{}CCA_R2_pvals{}_group{}'.format(path, '_maxT' if maxT else '', atlas_file), pvals_group=pvals_group, results_group=results_group)  
+
+    # Create nifti
+    if save_nifti_opt:
+        path = '{}cca_results/{}/group/{}/'.format(global_path, condition, suffix)
+        if not os.path.exists(path):
+            os.makedirs(path)
+
+        atlas = image.load_img('/data1/Action_teresi/CCA/atlas/Schaefer_7N_{}.nii.gz'.format(atlas_file[-3:]))
+        image_final = save_nifti(atlas, n_doms, results_group_dict, pvals_group_dict, rois, '{}CCA_R2_pvals{}_group_{}'.format(path,'_maxT' if maxT else '', atlas_file))
 
     return results_group, pvals_group
 
-def save_nifti(atlas, n_doms, results_group, pvals_group, path=''):
+def save_nifti(atlas, n_doms, results, pvals={}, rois_to_include=[], path=''):
 
     """
     Create and save Nifti image of results
@@ -299,12 +338,13 @@ def save_nifti(atlas, n_doms, results_group, pvals_group, path=''):
     Inputs:
     - atlas : nii like object, Atlas in nifti
     - n_doms : int, number of domains
-    - results_group : dict, containing ROIs as keys and mean R2 results of non permuted data as values (1d array of shape = n_doms)
-    - pvals_group : dict, containing ROIs as keys and pvals as values (2d array of shape = n_perms by n_doms)
-    - path : str, path where to save results
+    - results : dict, containing ROIs as keys and R2 results of non permuted data as values (1d array of shape = n_doms)
+    - pvals : dict, containing ROIs as keys and pvals as values (1d array of shape = n_doms); default = {} i.e. no pvals
+    - rois_to_include : list, list of ROIs to be considered; default = [], i.e. include all atlas ROIs
+    - path : str, path where to save results including nifti filename
 
     Outputs:
-    - image_final : array, 4d matrix of shape = x by y by z by n_doms*2, containing mean results for each domain and aggregated pvalues for each domain
+    - image_final : array, 4d matrix of shape = x by y by z by n_doms*2, containing results for each domain and pvalues for each domain
     """
 
     # Get atlas dimensions
@@ -313,15 +353,26 @@ def save_nifti(atlas, n_doms, results_group, pvals_group, path=''):
     atlas_rois = np.delete(atlas_rois, np.argwhere(atlas_rois==0))
     x,y,z = atlas_data.shape
 
+    # If indicated, select only specified ROIs 
+    if len(rois_to_include)<=0:
+        rois_to_include = list(atlas_rois)
+    
+    rois = np.array([r for r in rois_to_include if r in list(atlas_rois)])
+
     # Initialize image matrix
-    image_final = np.zeros((x, y, z, n_doms*2))
+    if len(pvals)>0:
+        image_final = np.zeros((x, y, z, n_doms*2))
+    else:
+        image_final = np.zeros((x, y, z, n_doms))
 
     # Assign group R2 and p_value to each voxel
-    for roi in atlas_rois:
+    for roi in rois:
         x_inds, y_inds, z_inds = np.where(atlas_data==roi)
         
-        image_final[x_inds, y_inds, z_inds, :n_doms] = results_group[roi]
-        image_final[x_inds, y_inds, z_inds, n_doms:] = 1-pvals_group[roi]
+        image_final[x_inds, y_inds, z_inds, :n_doms] = results[roi]
+        
+        if len(pvals)>0:
+            image_final[x_inds, y_inds, z_inds, n_doms:] = 1-pvals[roi]
     
     # Save
     if not os.path.exists(''.join([x + '/' for x in (path.split('/')[:-1])])):
@@ -331,7 +382,73 @@ def save_nifti(atlas, n_doms, results_group, pvals_group, path=''):
     img.to_filename(path)
 
     return image_final
+
+def get_results_sub(condition, sub, adjusted=True, save=True, suffix='', atlas_file='Schaefer200', global_path=None, save_nifti_opt=False):
+
+    """
+    Get p values for each subject (each permutation and each domain)
     
+    Inputs:
+    - condition : str, indicates condition, i.e. fMRI session the subjects were assigned to
+    - sub : str, sub number
+    - adjusted : bool, whether to get adjusted R2 or not adjusted R2; default=True (get adjusted)
+    - save : bool, whether to save single subject's results; default=True
+    - suffix : str, default=''
+    - atlas_file : str, default 'Schaefer200'
+    - global_path : str, default = None
+    - save_nifti_opt : bool, whether to create nifti with results or not; default=False
+
+    Outputs:
+    - res_sub_mat : array, containing R2 results for each ROI, perm and domain (3d array of shape = n_rois by n_perms by n_doms)    
+    - rois : list, containing ROIs
+
+    Calls:
+    - get_pvals()
+    - save_nifti()
+    """
+
+    if global_path is None: global_path = os.getcwd()
+
+    # Load R2 results of single subject
+    res_sub = np.load('{}cca_results/{}/sub-{}/{}/CCA_res_sub-{}_{}.npz'.format(global_path, condition, sub, suffix, sub, atlas_file), allow_pickle=True)['result_dict'].item()
+    rois = list(res_sub.keys())
+    n_rois = len(rois)
+    n_perms = res_sub[rois[0]].shape[1]
+    n_doms = res_sub[rois[0]].shape[2]
+
+    # Initialize results matrix and dictionary
+    res_sub_mat = np.full((n_rois, n_perms, n_doms), np.nan)
+    res_sub_dict = {}
+    rind = 1 if adjusted else 0
+    
+    # Iterate over ROIs and get R2 results
+    for r, roi in enumerate(rois):
+        res_roi = res_sub[roi][rind,:,:] # shape n_perms by n_doms 
+      
+        # Assign to results matrix and dict
+        res_sub_mat[r] = res_roi
+        res_sub_dict[roi] = res_roi[0]
+
+    # Save results
+    if save:
+        path = '{}cca_results/{}/sub-{}/{}/'.format(global_path, condition, sub, suffix)
+        if not os.path.exists(path):
+            os.makedirs(path)
+        
+        np.savez(path + 'CCA_R2{}_sub-{}_{}'.format('adj' if adjusted else '', sub, atlas_file),  res_sub_mat=np.squeeze(res_sub_mat), rois_order=rois)  
+
+    # Create nifti
+    if save_nifti_opt:
+        path = '{}cca_results/{}/sub-{}/{}/'.format(global_path, condition, sub, suffix)
+        if not os.path.exists(path):
+            os.makedirs(path)
+
+        atlas = image.load_img('/data1/Action_teresi/CCA/atlas/Schaefer_7N_{}.nii.gz'.format(atlas_file[-3:]))
+        image_final = save_nifti(atlas, n_doms, res_sub_dict, {}, rois, path+'CCA_R2{}_sub-{}_{}'.format('adj' if adjusted else '', sub, atlas_file))
+
+    return res_sub_mat, rois
+
+
 if __name__ == '__main__':
     
     print('Starting statistical analyses')
