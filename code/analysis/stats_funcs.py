@@ -323,7 +323,7 @@ def get_pvals_group(condition, rois, pvals_subs, res_subs, maxT=False, FDR=False
         if not os.path.exists(path):
             os.makedirs(path)
         
-        np.savez('{}CCA_R2_pvals{}{}_group_{}'.format(path, '_maxT' if maxT else '', '_FDR' if FDR else '', atlas_file), pvals_group=pvals_group, results_group=results_group)  
+        np.savez('{}CCA_R2_pvals{}{}_group_{}'.format(path, '_maxT' if maxT else '', '_FDR' if FDR else '', atlas_file), pvals_group=pvals_group, results_group=results_group, rois_list=rois)  
 
     # Create nifti
     if save_nifti_opt:
