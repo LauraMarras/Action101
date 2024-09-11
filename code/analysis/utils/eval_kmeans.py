@@ -16,6 +16,7 @@ def evalKMeans(range_n_clusters, X, print_otp=False, metric='euclidean'):
 
         # Save clusters labels
         clusters_labels[idx,:] = cluster_labels
+        clusters_labels = clusters_labels.astype(int)+1
 
         # Get the silhouette_score (average value for all the samples) as measure of goodness of clustering
         silhouette_avg[idx] = silhouette_score(X, cluster_labels, metric=metric)
