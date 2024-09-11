@@ -11,11 +11,10 @@ from scipy.stats import false_discovery_control as fdr
 
 if __name__ == '__main__': 
     
-    # Set options
-    condition = 'aud'
-    full_model_opt = False # full_model vs variance_partitioning (if False run Variance partitioning)
+    # Set options and parameters
+    condition = 'vid'
+    full_model_opt = True # full_model vs variance_partitioning (if False run Variance partitioning)
 
-    # Set parameters
     sub_lists = {'AV': np.array([12, 13, 14, 15, 16, 17, 18, 19, 22, 32]), 'vid': np.array([20, 21, 23, 24, 25, 26, 28, 29, 30, 31]), 'aud': np.array([3, 4, 5, 6, 7, 8, 9, 10, 11, 27])}
     sub_list = sub_lists[condition]
     n_subs = len(sub_list)
@@ -28,11 +27,13 @@ if __name__ == '__main__':
 
     ss_stats = False
     adjusted = False
-    save = 0
-    save_stats_nifti = 0
 
     group_stats = True
     maxT = True
+    FDR = False
+
+    save = True
+    save_stats_nifti = False
 
     # Load task and Create Full model
     domains_list = ['space', 'movement', 'agent_objective', 'social_connectivity', 'emotion_expression', 'linguistic_predictiveness']
@@ -121,6 +122,6 @@ if __name__ == '__main__':
             pvals = np.load('{}CCA_R2{}_pvals_allsubs_{}.npz'.format(path, 'adj' if adjusted else '', atlas_file), allow_pickle=True)['pvals']
         
             # Get aggregated results and pvals
-            results_group, pvals_group = get_pvals_group(condition, rois, pvals, results, maxT=maxT, save=save, suffix=suffix, global_path=global_path, save_nifti_opt=save_stats_nifti)
+            results_group, pvals_group = get_pvals_group(condition, rois, pvals, results, maxT=maxT, FDR=FDR, save=save, suffix=suffix, global_path=global_path, save_nifti_opt=save_stats_nifti)
         
         print('Finished group statistical analyses')
