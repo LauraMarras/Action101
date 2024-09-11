@@ -3,6 +3,7 @@ from scipy.stats import pareto, chi2
 from matplotlib import pyplot as plt
 import os
 from nilearn import image
+from scipy.stats import false_discovery_control as fdr
 
 
 def plot_pareto(right_tail, kHat, loc, sigmaHat, q, critical_value, pname):
@@ -247,7 +248,7 @@ def fisher_sum(pvals_all_subs):
 
     return pval, t
 
-def get_pvals_group(condition, rois, pvals_subs, res_subs, maxT=False, save=True, suffix='', atlas_file='Schaefer200', global_path=None, save_nifti_opt=False):
+def get_pvals_group(condition, rois, pvals_subs, res_subs, maxT=False, FDR=False, save=True, suffix='', atlas_file='Schaefer200', global_path=None, save_nifti_opt=False):
 
     """
     Get p values at group level (each permutation and each domain)
@@ -258,6 +259,7 @@ def get_pvals_group(condition, rois, pvals_subs, res_subs, maxT=False, save=True
     - pvals_subs : array, 4d array of shape = n_subs by n_rois by n_perms by n_doms
     - res_subs : array, 4d array of shape = n_subs by n_rois by n_perms by n_doms
     - maxT : bool, whether to correct for multiple comparisons using max-T correction; default=False
+    - FDR : bool, whether to correct for multiple comparisons using FDR correction; default=False
     - save : bool, whether to save group results; default=True
     - suffix : str, suffix; default = ''
     - atlas_file : str, default 'Schaefer200'
@@ -311,13 +313,17 @@ def get_pvals_group(condition, rois, pvals_subs, res_subs, maxT=False, save=True
             pvals_group[r,d] = np.array(get_pval_pareto(pvals_roi_dom))
         pvals_group_dict[roi] = pvals_group[r,:]
 
+    # FDR correction
+    if FDR:
+        pvals_group = np.reshape(fdr(np.ravel(pvals_group)), pvals_group.shape)
+
     # Save results
     if save:
         path = '{}cca_results/{}/group/{}/'.format(global_path, condition, suffix)
         if not os.path.exists(path):
             os.makedirs(path)
         
-        np.savez('{}CCA_R2_pvals{}_group{}'.format(path, '_maxT' if maxT else '', atlas_file), pvals_group=pvals_group, results_group=results_group)  
+        np.savez('{}CCA_R2_pvals{}{}_group_{}'.format(path, '_maxT' if maxT else '', '_FDR' if FDR else '', atlas_file), pvals_group=pvals_group, results_group=results_group)  
 
     # Create nifti
     if save_nifti_opt:
