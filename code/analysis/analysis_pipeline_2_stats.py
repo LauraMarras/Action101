@@ -22,7 +22,7 @@ if __name__ == '__main__':
     
     n_perms = 1000 if full_model_opt else 0
     atlas_file = 'Schaefer200'
-    rois_to_include = list(np.loadtxt('/data1/Action_teresi/CCA/cca_results/group/significantROIs_AV.txt').astype(int)) if condition != 'AV' else []
+    rois_to_include = list(np.loadtxt('{}cca_results/AV/group/fullmodel/significantROIs_AV.txt'.format(global_path)).astype(int)) if condition != 'AV' else []
     suffix = 'fullmodel' if full_model_opt else 'variancepart'
 
     ss_stats = False
