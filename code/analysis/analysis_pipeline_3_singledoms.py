@@ -55,9 +55,9 @@ def save_nifti(results, briks, atlas_file='Schaefer200', savepath='', ROIsmask=[
 if __name__ == '__main__': 
     
     # Set options and parameters
-    condition = 'AV'
-    save = False
-    save_nifti_opt = False
+    condition = 'aud'
+    save = True
+    save_nifti_opt = True
     atlas_file = 'Schaefer200'
     alpha = 0.05
     maxT = True
@@ -71,9 +71,8 @@ if __name__ == '__main__':
     ROIs_sign_idx = np.unique(np.where(np.squeeze(pvals_group_fm) < alpha)[0])
     ROIs_sign = np.load('{}cca_results/{}/group/fullmodel/CCA_R2_pvals{}_group_{}.npz'.format(global_path, condition, '_maxT' if maxT else '', atlas_file), allow_pickle=True)['rois_list'][ROIs_sign_idx]
 
-    # Save list of significant ROIs in AV condition
-    if condition == 'AV':
-        np.savetxt('{}cca_results/AV/group/fullmodel/significantROIs_AV.txt'.format(global_path), ROIs_sign)
+    # Save list of significant ROIs
+    np.savetxt('{}cca_results/{}/group/fullmodel/significantROIs_{}.txt'.format(global_path, condition, condition), ROIs_sign)
 
     # Load R2 from full model and variance partitioning, select first perm (true R), and significative ROIs 
     results_vp = np.load('{}cca_results/{}/group/variancepart/CCA_R2_allsubs_{}.npz'.format(global_path, condition, atlas_file), allow_pickle=True)['results'][:, ROIs_sign_idx, 0, :]

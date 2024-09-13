@@ -12,8 +12,8 @@ from scipy.stats import false_discovery_control as fdr
 if __name__ == '__main__': 
     
     # Set options and parameters
-    condition = 'vid'
-    full_model_opt = True # full_model vs variance_partitioning (if False run Variance partitioning)
+    condition = 'aud'
+    full_model_opt = False # full_model vs variance_partitioning (if False run Variance partitioning)
 
     sub_lists = {'AV': np.array([12, 13, 14, 15, 16, 17, 18, 19, 22, 32]), 'vid': np.array([20, 21, 23, 24, 25, 26, 28, 29, 30, 31]), 'aud': np.array([3, 4, 5, 6, 7, 8, 9, 10, 11, 27])}
     sub_list = sub_lists[condition]
@@ -25,10 +25,10 @@ if __name__ == '__main__':
     rois_to_include = list(np.loadtxt('{}cca_results/AV/group/fullmodel/significantROIs_AV.txt'.format(global_path)).astype(int)) if condition != 'AV' else []
     suffix = 'fullmodel' if full_model_opt else 'variancepart'
 
-    ss_stats = False
+    ss_stats = True
     adjusted = False
 
-    group_stats = True
+    group_stats = False
     maxT = True
     FDR = False
 

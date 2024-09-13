@@ -11,9 +11,9 @@ from canonical_correlation_funcs import run_cca_all_subjects
 if __name__ == '__main__': 
     
     # Set options and parameters
-    condition = 'vid'
-    full_model_opt = True # full_model vs variance_partitioning (if False run Variance partitioning)
-    pooln = 16
+    condition = 'aud'
+    full_model_opt = False # full_model vs variance_partitioning (if False run Variance partitioning)
+    pooln = 32
 
     sub_lists = {'AV': np.array([12, 13, 14, 15, 16, 17, 18, 19, 22, 32]), 'vid': np.array([20, 21, 23, 24, 25, 26, 28, 29, 30, 31]), 'aud': np.array([3, 4, 5, 6, 7, 8, 9, 10, 11, 27])}
     sub_list = sub_lists[condition]
