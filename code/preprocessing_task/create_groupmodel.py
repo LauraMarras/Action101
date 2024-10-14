@@ -232,6 +232,9 @@ if __name__ == '__main__':
 
     # Downsample to resolution 2sec
     group_downsampled = downsample(group_model, 2, 'binary')
+    df_AI_ds = downsample(df_exp_AI, 2, 'binary')
+    df_LM_ds = downsample(df_exp_LM, 2, 'binary')
+    df_LT_ds = downsample(df_exp_LT, 2, 'binary')
 
     # Convolve with HRF
     group_conv_ds = convolve_HRF(group_downsampled, tr=2, hrf_p=8.6, hrf_q=0.547, dur=12)
@@ -250,5 +253,11 @@ if __name__ == '__main__':
     group_conv_us.to_csv(out_path + 'conv_us.csv', sep=',', index_label=False)
     group_upsampled.to_csv(out_path + 'bin_us.csv', sep=',', index_label=False)
     group_downsampled.to_csv(out_path + 'bin_ds.csv', sep=',', index_label=False)
+
+    out_path = '/home/laura.marras/Documents/Repositories/Action101/data/models/'
+    df_AI_ds.to_csv(out_path + 'AI_ds.csv', sep=',', index_label=False)
+    df_LM_ds.to_csv(out_path + 'LM_ds.csv', sep=',', index_label=False)
+    df_LT_ds.to_csv(out_path + 'LT_ds.csv', sep=',', index_label=False)
+
 
     print('d')
