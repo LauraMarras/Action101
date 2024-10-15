@@ -91,14 +91,6 @@ def save_nifti(results, briks, atlas_file='Schaefer200', savepath='', ROIsmask=[
 
     return
 
-def create_ttest_nifti(ts, pvals, dom_combs, dom_combs_str):
-        for c, comb in enumerate(dom_combs):
-            cres = np.expand_dims(np.vstack((ts[:,c], pvals[:,c])).T, axis=0)
-            path = '/data1/Action_teresi/CCA/cca_results/group/ttest/ttest_{}.nii.gz'.format(dom_combs_str[c][0][:5] + 'vs' + dom_combs_str[c][1][:5])
-            save_nifti(cres, 2, atlas_file, path, ROIs_2keep+1)
-
-        return
-
 if __name__ == '__main__': 
     
     # Set parameters
