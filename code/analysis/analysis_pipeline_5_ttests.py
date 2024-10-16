@@ -114,6 +114,7 @@ if __name__ == '__main__':
     dom_combs = list(itertools.product(range(n_doms), range(n_doms)))
     dom_combs_str = list(itertools.product(domains_list,domains_list))
     dom_combs = list(itertools.combinations(range(n_doms), 2))
+    dom_combs_str = list(itertools.combinations(domains_list, 2))
     
     # Run t-tests
     path = '{}ttest/'.format(global_path)
@@ -121,10 +122,14 @@ if __name__ == '__main__':
                 os.makedirs(path)
 
     # Get ranks
-    ranked_res = np.argsort(results_singledoms, axis=-1)
+    ranked_res =  np.argsort(np.argsort(results_singledoms, axis=-1))
+
+    maxwin = np.argmax((np.mean(ranked_res, axis=0)), axis=1)
 
     # Init results mat
     avg_differences = np.full((len(rois_sign), len(dom_combs)), np.nan)
+    wilcox_res = np.full((len(rois_sign), len(dom_combs), 2), np.nan)
+    ttest_res = np.full((len(rois_sign), len(dom_combs), 2), np.nan)
 
     for r, roi in enumerate(rois_sign):
         for d, comb in enumerate(dom_combs):
@@ -133,8 +138,13 @@ if __name__ == '__main__':
             dom2 = ranked_res[:,r,comb[1]]
 
             avg_differences[r, d] = np.mean(dom1) - np.mean(dom2)
-        
 
+            stat, pval = wilcoxon(dom1, dom2)
+            wilcox_res[r, d] = stat, pval
+
+
+            statt, pvalt = ttest_rel(dom1, dom2)
+            ttest_res[r, d] = statt, pvalt
 
         
         
