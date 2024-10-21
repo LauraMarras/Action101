@@ -1,95 +1,8 @@
 import os
 import numpy as np
-from nilearn import image
-from canonical_correlation_funcs import extract_roi, run_cca_all_subjects
-from stats_funcs import get_pvals_sub, get_pvals_group, save_nifti
-from sklearn.manifold import MDS, TSNE
 from scipy.stats import false_discovery_control as fdr
-from scipy.stats import ttest_ind, wilcoxon, ttest_rel
+from scipy.stats import wilcoxon, friedmanchisquare
 import itertools
-from utils.eval_kmeans import evalKMeans
-from matplotlib import pyplot as plt
-from scipy.spatial.distance import pdist, squareform
-import seaborn as sns
-from matplotlib.colors import LinearSegmentedColormap
-from matplotlib.lines import Line2D
-
-def ttest_domains(results, dom_combs, dom_combs_str, test2use='rel', fdr_opt=True, save=False, path=''):
-    
-    # Initialize results matrices
-    ts = np.empty((results.shape[1], len(dom_combs)))
-    pvals = np.empty((results.shape[1], len(dom_combs)))
-
-    # Run ttest_rel for each ROI and each domains pairing
-    for roi in range(results.shape[1]):  
-        for comb in dom_combs:
-            d1 = results[:, roi, comb[0]]
-            d2 = results[:, roi, comb[1]]
-
-            if test2use == 'rel':
-                t, pval = ttest_rel(d1, d2)
-            elif test2use == 'rel':
-                t, pval = ttest_ind(d1, d2)
-
-            ts[roi,comb] = t 
-            pvals[roi,comb] = pval
-    
-    # FDR correction for multiple comparisons
-    if fdr_opt:
-        pvals = np.reshape(fdr(np.ravel(pvals)), pvals.shape)
-
-    # Save results
-    if save:
-        np.savez('{}ttest_{}{}'.format(path, test2use, '_fdr' if fdr_opt else ''), tstat=ts, pvals=pvals, domains_contrasts=dom_combs_str, FDRcorrection=fdr_opt)
-
-    return ts, pvals
-
-def clustering(results_group, n_clust_max, atlas_file):
-
-    silhouette_avg, clusters_labels = evalKMeans(range(2, n_clust_max+1), results_group, print_otp=False)
-    clusters_labels += 1
-
-    # Load Atlas
-    atlas = image.load_img('/data1/Action_teresi/CCA/atlas/Schaefer_7N_{}.nii.gz'.format(atlas_file[-3:]))
-    x,y,z = atlas.get_fdata().shape
-        
-    # Initialize volume
-    image_final = np.zeros((x, y, z, n_clust_max+1-2))
-
-    # Create volume with cluster values for each k
-    for k in range(n_clust_max+1-2):
-        for r in range(results_group.shape[0]):
-            x_inds, y_inds, z_inds = np.where(atlas.get_fdata()==r+1)
-            image_final[x_inds, y_inds, z_inds, k] = clusters_labels[k,r]
-        
-    # Create nifti
-    img = image.new_img_like(atlas, image_final, affine=atlas.affine, copy_header=False)
-    img.to_filename('/data1/Action_teresi/CCA/{}_clustering.nii.gz'.format(atlas_file))
-
-    return silhouette_avg, clusters_labels
-
-def save_nifti(results, briks, atlas_file='Schaefer200', savepath='', ROIsmask=[]):
-    
-    atlas = image.load_img('/data1/Action_teresi/CCA/atlas/Schaefer_7N_{}.nii.gz'.format(atlas_file[-3:]))
-    atlas_rois = np.unique(atlas.get_fdata()).astype(int)
-    atlas_rois = np.delete(atlas_rois, np.argwhere(atlas_rois==0))
-
-    if len(ROIsmask) <= 0:
-        ROIsmask = atlas_rois
-
-    x,y,z = atlas.get_fdata().shape
-    
-    image_final = np.squeeze(np.zeros((x,y,z,briks)))
-
-    for r, roi in enumerate(ROIsmask):
-        x_inds, y_inds, z_inds = np.where(atlas.get_fdata()==roi)
-        
-        image_final[x_inds, y_inds, z_inds] = results[:, r]
-
-    img = image.new_img_like(atlas, image_final, affine=atlas.affine, copy_header=False)
-    img.to_filename(savepath)
-
-    return
 
 if __name__ == '__main__': 
     
@@ -99,7 +12,7 @@ if __name__ == '__main__':
     sub_lists = {'AV': np.array([12, 13, 14, 15, 16, 17, 18, 19, 22, 32]), 'vid': np.array([20, 21, 23, 24, 25, 26, 28, 29, 30, 31]), 'aud': np.array([3, 4, 5, 6, 7, 8, 9, 10, 11, 27])}
     sub_list = sub_lists[condition]
     n_subs = len(sub_list)
-    global_path = '/home/laura.marras/Documents/Repositories/Action101/data/'
+    global_path = '/home/laura.marras/Documents/Repositories/Action101/data/' # 'C:/Users/SemperMoMiLab/Documents/Repositories/Action101/data/' #
     atlas_file = 'Schaefer200'
 
     # Load group results
@@ -111,51 +24,54 @@ if __name__ == '__main__':
     domains = {d: np.loadtxt('/home/laura.marras/Documents/Repositories/Action101/data/models/domains/group_ds_conv_{}.csv'.format(d), delimiter=',', skiprows=1)[:, 1:] for d in domains_list}
     n_doms = len(domains.keys())
     n_predictors = np.sum([domains[d].shape[1] for d in domains_list])
-    dom_combs = list(itertools.product(range(n_doms), range(n_doms)))
-    dom_combs_str = list(itertools.product(domains_list,domains_list))
-    dom_combs = list(itertools.combinations(range(n_doms), 2))
-    dom_combs_str = list(itertools.combinations(domains_list, 2))
+
+    dom_combs = list(itertools.combinations(range(n_doms), 2)) #list(itertools.product(range(n_doms), range(n_doms))) #
+    dom_combs_str = np.array(list(itertools.combinations(domains_list, 2))) #np.array(list(itertools.product(domains_list,domains_list))) #
     
     # Run t-tests
-    path = '{}ttest/'.format(global_path)
+    path = '{}ttest_nonparam/'.format(global_path)
     if not os.path.exists(path):
-                os.makedirs(path)
+        os.makedirs(path)
 
     # Get ranks
-    ranked_res =  np.argsort(np.argsort(results_singledoms, axis=-1))+1
+    rois_ranks = np.argsort(np.argsort(results_singledoms, axis=1), axis=1)+1 # For each subject and for each domain, get ranks of R2 across ROIs
 
-    maxwin = np.argmax((np.mean(ranked_res, axis=0)), axis=1)
+    # Run Friedman test
+    friedman_stats, friedman_pvals = friedmanchisquare(rois_ranks[:,:,0], rois_ranks[:,:,1], rois_ranks[:,:,2], rois_ranks[:,:,3], rois_ranks[:,:,4], rois_ranks[:,:,5], axis=0)
 
-    # Init results mat
-    avg_differences = np.full((len(rois_sign), len(dom_combs)), np.nan)
-    wilcox_res = np.full((len(rois_sign), len(dom_combs), 2), np.nan)
-    ttest_res = np.full((len(rois_sign), len(dom_combs), 2), np.nan)
+    # Correct for multiple comparisons
+    friedman_qvals = fdr(friedman_pvals)
 
-    for r, roi in enumerate(rois_sign):
-        for d, comb in enumerate(dom_combs):
-              
-            dom1 = ranked_res[:,r,comb[0]]
-            dom2 = ranked_res[:,r,comb[1]]
-
-            avg_differences[r, d] = np.mean(dom1) - np.mean(dom2)
-
-            stat, pval = wilcoxon(dom1, dom2)
-            wilcox_res[r, d] = stat, pval
-
-
-            statt, pvalt = ttest_rel(dom1, dom2)
-            ttest_res[r, d] = statt, pvalt
-
-        
-        
-    # Plot
-    fig, ax = plt.subplots()
-    sns.heatmap(avg_differences, ax=ax, square=True, annot=True, xticklabels=list(domains.keys()), yticklabels=list(domains.keys()), cmap='rocket_r', cbar_kws=dict(pad=0.01,shrink=0.9))
+    # Run pairwise comparisons with wilcoxon for significant ROIs
+    idx_fried_sign = np.where(friedman_qvals<0.05)[0]
+    rois_fried_sign = rois_sign[idx_fried_sign]
     
-    # Labels and layout
-    plt.tight_layout()
+    # Initialize results mat
+    wilcox_stats = np.full((len(rois_fried_sign), len(dom_combs)), np.nan)
+    wilcox_pvals = np.full((len(rois_fried_sign), len(dom_combs)), np.nan)
+    wilcox_doms = np.full((len(rois_fried_sign), len(dom_combs)), np.nan)
+    
 
-    # Save
-    plt.savefig(path + 'ranked_test_domains_roi{}.png'.format(roi))
+    # Iterate over doms combinations
+    for d, comb in enumerate(dom_combs):
+        dom1 = rois_ranks[:, idx_fried_sign, comb[0]]
+        dom2 = rois_ranks[:, idx_fried_sign, comb[1]]
+
+        wilcox_stats[:, d], wilcox_pvals[:, d] = wilcoxon(dom1, dom2, axis=0)
+        wilcox_doms[:, d] = np.array([comb[i] for i in (np.median(dom1-dom2, axis=0)<0)*1])
+
+    wilcox_doms = wilcox_doms.astype(int)
+    
+    # Correct for multiple comparisons
+    wilcox_qvals = fdr(wilcox_pvals)
+
+    rois_wilcox_sign = rois_fried_sign[np.where(wilcox_qvals<0.05)[0]]
+    combs_wilcox_sign = np.array(dom_combs_str)[np.where(wilcox_qvals<0.05)[1]]
+    windom_wilcox_sign = combs_wilcox_sign[wilcox_doms[np.where(wilcox_qvals<0.05)]]
+
+    for r, roi in enumerate(rois_wilcox_sign):
+        print(roi)
+        print(combs_wilcox_sign[r])
+        print(windom_wilcox_sign[r])
 
     print('d')
