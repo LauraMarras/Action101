@@ -1,6 +1,6 @@
 import numpy as np
 import pandas as pd
-from canonical_correlation_funcs import canonical_correlation
+from utils.similarity_measures import canonical_correlation
 import matplotlib.pyplot as plt
 
 
