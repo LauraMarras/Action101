@@ -173,7 +173,7 @@ if __name__ == '__main__':
           CCA_full_shuff_res[vperm-1, d], _, _, _, _, _, _ = canonical_correlation(full, shuffled)
           
           # Run CKA
-          dbCKA_res[vperm-1, d] = feature_space_linear_cka(shuffled, full, debiased=True)
+          dbCKA_res[vperm-1, d] = linear_cka(shuffled, full, debiasing=True)
           CKA_res[vperm-1, d] = linear_cka(shuffled, full)
           
     # Get average R2 results across perms
