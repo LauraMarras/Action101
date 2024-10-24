@@ -106,3 +106,13 @@ def canonical_correlation(X,Y, center=True):
     r2adj = 1 - (1-r2)*((n-1)/(n-p-1))
 
     return r2, r2adj, A, B, R, U, V
+
+def rvcoeff(X,Y):
+    
+    P1= X.shape[1]
+    P2 = Y.shape[1]
+    N = X.shape[0]
+
+    RV = (P1*P2)/(np.sqrt((P1**2 + (N+1)*P1)*(P2**2 + (N+1)*P2)))
+
+    return RV
