@@ -1,51 +1,9 @@
 import numpy as np
 import pandas as pd
 from utils.similarity_measures import canonical_correlation, linear_cka
+from utils.permutation_schema_func import permutation_schema
 import matplotlib.pyplot as plt
 import seaborn as sns
-
-from utils.permutation_schema_func import permutation_schema
-
-def linear_cka(X, Y, debiasing=False):
-    
-    """
-    Compute CKA with a linear kernel, in feature space.
-    Inputs:
-    - X: array, 2d matrix of shape = samples by features
-    - Y: array, 2d matrix of shape = samples by features
-    - debiasing: bool, whether to apply debiasing or not; default = False 
-    
-    Output:
-    - CKA: float, the value of CKA between X and Y
-    """
-
-    # Recenter
-    X = X - np.mean(X, 0, keepdims=True)
-    Y = Y - np.mean(Y, 0, keepdims=True)
-
-    # Get dot product similarity and normalized matrices
-    similarity = np.linalg.norm(np.dot(X.T, Y))**2 # Squared Frobenius norm of dot product between X transpose and Y
-    normal_x = np.linalg.norm(np.dot(X.T, X)) 
-    normal_y = np.linalg.norm(np.dot(Y.T, Y))
-    
-    # Apply debiasing
-    if debiasing: 
-      n = X.shape[0]
-      bias_correction_factor = (n-1)*(n-2)
-    
-      SS_x = np.sum(X**2, axis=1) # Sum of squared rows 
-      SS_y = np.sum(Y**2, axis=1)
-      Snorm_x = np.sum(SS_x) # Squared Frobenius norm
-      Snorm_y = np.sum(SS_y)
-      
-      similarity = similarity - ((n/(n-2)) * np.dot(SS_x, SS_y)) + ((Snorm_x * Snorm_y) / bias_correction_factor)
-      normal_x = np.sqrt(normal_x**2 - ((n/(n-2)) * np.dot(SS_x, SS_x)) + ((Snorm_x * Snorm_x) / bias_correction_factor)) 
-      normal_y = np.sqrt(normal_y**2 - ((n/(n-2)) * np.dot(SS_y, SS_y)) + ((Snorm_x * Snorm_x) / bias_correction_factor))
-
-    # Get CKA between X and Y
-    CKA = similarity / np.dot(normal_x, normal_y)
-
-    return CKA
 
 def plot_corrs(results, domains, measure, path):
    

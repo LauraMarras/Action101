@@ -1,84 +1,7 @@
 import numpy as np
 import pandas as pd
-from utils.similarity_measures import canonical_correlation
+from utils.similarity_measures import canonical_correlation, linear_cka
 import matplotlib.pyplot as plt
-
-
-def _debiased_dot_product_similarity_helper(xty, sum_squared_rows_x, sum_squared_rows_y, squared_norm_x, squared_norm_y, n):
-  """Helper for computing debiased dot product similarity (i.e. linear HSIC)."""
-  # This formula can be derived by manipulating the unbiased estimator from
-  # Song et al. (2007).
-  return (
-      xty - n / (n - 2.) * sum_squared_rows_x.dot(sum_squared_rows_y)
-      + squared_norm_x * squared_norm_y / ((n - 1) * (n - 2)))
-
-
-def feature_space_linear_cka(features_x, features_y, debiased=False):
-  """Compute CKA with a linear kernel, in feature space.
-
-  This is typically faster than computing the Gram matrix when there are fewer
-  features than examples.
-
-  Args:
-    features_x: A num_examples x num_features matrix of features.
-    features_y: A num_examples x num_features matrix of features.
-    debiased: Use unbiased estimator of dot product similarity. CKA may still be
-      biased. Note that this estimator may be negative.
-
-  Returns:
-    The value of CKA between X and Y.
-  """
-  features_x = features_x - np.mean(features_x, 0, keepdims=True)
-  features_y = features_y - np.mean(features_y, 0, keepdims=True)
-
-  dot_product_similarity = np.linalg.norm(features_x.T.dot(features_y)) ** 2
-  normalization_x = np.linalg.norm(features_x.T.dot(features_x))
-  normalization_y = np.linalg.norm(features_y.T.dot(features_y))
-
-  if debiased:
-    n = features_x.shape[0]
-    # Equivalent to np.sum(features_x ** 2, 1) but avoids an intermediate array.
-    sum_squared_rows_x = np.einsum('ij,ij->i', features_x, features_x)
-    sum_squared_rows_y = np.einsum('ij,ij->i', features_y, features_y)
-    squared_norm_x = np.sum(sum_squared_rows_x)
-    squared_norm_y = np.sum(sum_squared_rows_y)
-
-    dot_product_similarity = _debiased_dot_product_similarity_helper(
-        dot_product_similarity, sum_squared_rows_x, sum_squared_rows_y,
-        squared_norm_x, squared_norm_y, n)
-    normalization_x = np.sqrt(_debiased_dot_product_similarity_helper(
-        normalization_x ** 2, sum_squared_rows_x, sum_squared_rows_x,
-        squared_norm_x, squared_norm_x, n))
-    normalization_y = np.sqrt(_debiased_dot_product_similarity_helper(
-        normalization_y ** 2, sum_squared_rows_y, sum_squared_rows_y,
-        squared_norm_y, squared_norm_y, n))
-
-  return dot_product_similarity / (normalization_x * normalization_y)
-
-def linear_cka(X, Y):
-    
-    """
-    Compute CKA with a linear kernel, in feature space.
-    Inputs:
-    - X: array, 2d matrix of shape = samples by features
-    - Y: 2d matrix of shape = samples by features
-    
-    Output:
-    - CKA: float, the value of CKA between X and Y
-    """
-
-    # Recenter
-    X = X - np.mean(X, 0, keepdims=True)
-    Y = Y - np.mean(Y, 0, keepdims=True)
-
-    # Get CKA between X and Y
-    dot_product_similarity = np.linalg.norm(np.dot(X.T, Y)) ** 2 # Squared Frobenius norm of dot product between X transpose and Y
-    normalization_x = np.linalg.norm(np.dot(X.T, X)) 
-    normalization_y = np.linalg.norm(np.dot(Y.T, Y))
-
-    CKA = dot_product_similarity / np.dot(normalization_x, normalization_y)
-
-    return CKA
 
 def plot_corrs(results, domains, measure, path):
    
@@ -143,7 +66,6 @@ if __name__ == '__main__':
        'full': ['sociality', 'target', 'touch', 'multi_ag_vs_jointact', 'ToM', 'people_present', 'durativity', 'telicity', 'iterativity', 'dinamicity', 'EBL', 'EIA', 'gesticolare', 'simbolic_gestures', 'agent_H_NH', 'tool_mediated', 'transitivity', 'context', 'inter_scale', 'main_effector', 'eff_visibility']
        }
     
-    
     # Load single tagger tagging
     AI = pd.read_csv(path + '{}_ds_notOHE.csv'.format('AI'), sep=',')
     LM = pd.read_csv(path + '{}_ds_notOHE.csv'.format('LM'), sep=',')
@@ -163,9 +85,9 @@ if __name__ == '__main__':
         CKA_res[1, d] = linear_cka(ai, lt)
         CKA_res[2, d] = linear_cka(lm, lt)
         
-        dbCKA_res[0, d] = feature_space_linear_cka(ai, lm, debiased=True)
-        dbCKA_res[1, d] = feature_space_linear_cka(ai, lt, debiased=True)
-        dbCKA_res[2, d] = feature_space_linear_cka(lm, lt, debiased=True)
+        dbCKA_res[0, d] = linear_cka(ai, lm, debiasing=True)
+        dbCKA_res[1, d] = linear_cka(ai, lt, debiasing=True)
+        dbCKA_res[2, d] = linear_cka(lm, lt, debiasing=True)
         
         CCA_res[0, d] = canonical_correlation(ai, lm)[0]
         CCA_res[1, d] = canonical_correlation(ai, lt)[0]
