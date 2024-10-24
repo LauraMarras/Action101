@@ -31,4 +31,7 @@ if __name__ == '__main__':
             cka_res[m,d] = linear_cka(model_data, domains[dom], debiasing=False)
             dbcka_res[m,d] = linear_cka(model_data, domains[dom], debiasing=True)
 
+    # Save results
+    np.savetxt(models_path + 'cka_domains.txt', np.vstack((models, cka_res.T)))
+    np.savetxt(models_path + 'dbcka_domains.txt', np.vstack((models, dbcka_res.T)))
     print('d')
