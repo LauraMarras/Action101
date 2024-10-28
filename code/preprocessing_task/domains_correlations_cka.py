@@ -109,7 +109,7 @@ if __name__ == '__main__':
     domains = {d: np.loadtxt('/home/laura.marras/Documents/Repositories/Action101/data/models/domains/group_ds_conv_{}.csv'.format(d), delimiter=',', skiprows=1)[:, 1:] for d in domains_list}
     full_model = {'full_model': np.hstack([domains[d] for d in domains_list])}
     full = full_model['full_model']
-    domains['full'] = full
+    #domains['full'] = full
 
     # Initialize arrays to save all permuted results 
     CCA_shuff_full_res = np.full((50, len(domains)), np.nan)
