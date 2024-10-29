@@ -61,4 +61,19 @@ if __name__ == '__main__':
 
     # Save
     plt.savefig(models_path + 'cka.png')
+
+    # Set up the heatmap plot
+    plt.figure(figsize=(10, 8))
+    sns.heatmap(dbcka_df, annot=True, fmt=".2f", cmap='rocket_r', cbar_kws={'label': 'CKA Similarity'})
+
+    # Customize the plot
+    plt.title('CKA Similarity between Computational Models and Domains')
+    plt.xlabel('Domain')
+    plt.ylabel('Model')
+    plt.xticks(rotation=45)
+    plt.yticks(rotation=0)
     
+    plt.tight_layout()
+
+    # Save the plot
+    plt.savefig(models_path + 'cka_heatmap.png')
