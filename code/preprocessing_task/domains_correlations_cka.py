@@ -8,15 +8,20 @@ import seaborn as sns
 def plot_corrs(results, domains, measure, path):
    
     # Plot
-    fig, ax = plt.subplots(figsize=(10, 7.5))
-    sns.heatmap(results, ax=ax, vmin=0, vmax=1, square=True, annot=True, xticklabels=domains, yticklabels=domains, cmap='rocket_r', cbar_kws=dict(pad=0.01,shrink=0.9, label=measure))
+    fig, axs = plt.subplots(1,2, figsize=(20, 7.5))
     
-    # Labels and layout
-    ax.set_title('{} between domains'.format(measure))
+    for r, result in enumerate(results):
+      ax = axs[r]
+      sns.heatmap(result, ax=ax, vmin=0, vmax=1, square=True, annot=True, xticklabels=domains, yticklabels=domains, cmap='rocket_r', cbar_kws=dict(pad=0.01,shrink=0.9, label=measure[r]))
+    
+      # Labels and layout
+      ax.set_title('{} between domains'.format(measure[r]))
+      ax.set_xticklabels(labels=domains, rotation=45)
+
     plt.tight_layout()
 
     # Save
-    plt.savefig(path + 'domains_corr_{}.png'.format(measure))
+    plt.savefig(path + 'domains_corr_CKA_CCA.png')
 
 def barplot_corrs(results, domains, measures_names, path):
    
@@ -51,7 +56,7 @@ def barplot_corrs(results, domains, measures_names, path):
     plt.savefig(path + 'similarity_fullvsshuffledmodels.png')
 
 if __name__ == '__main__':
-    
+    plot=True
     path = '/home/laura.marras/Documents/Repositories/Action101/data/models/'
       
     domains = {
@@ -65,7 +70,7 @@ if __name__ == '__main__':
     'linguistic_predictiveness': ['durativity', 'telicity', 'iterativity', 'dinamicity'],
     'full': ['context_0', 'context_1', 'context_2', 'inter_scale', 'eff_visibility', 'main_effector_0', 'main_effector_1', 'main_effector_2', 
                 'main_effector_3', 'main_effector_4', 'main_effector_5', 'main_effector_6',
-                  'main_effector_7', 'main_effector_8', 'main_effector_9', 'main_effector_10', 'target_0','target_1', 'agent_H_NH', 'tool_mediated', 'transitivity', 'touch_2', 'sociality', 'touch_1', 'target_2', 'target_3', 'multi_ag_vs_jointact_1', 'multi_ag_vs_jointact_2', 'ToM', 'people_present', 'EBL', 'EIA', 'gesticolare', 'simbolic_gestures', 'durativity', 'telicity', 'iterativity', 'dinamicity',
+                  'main_effector_7', 'main_effector_8', 'main_effector_9', 'main_effector_10', 'target_0','target_1', 'agent_H_NH', 'tool_mediated', 'transitivity', 'touch_2', 'sociality', 'touch_1', 'target_2', 'target_3', 'multi_ag_vs_jointact_1', 'multi_ag_vs_jointact_2', 'ToM', 'people_present',
                   'EBL', 'EIA', 'gesticolare', 'simbolic_gestures','durativity', 'telicity', 'iterativity', 'dinamicity']
     }
     
@@ -98,10 +103,8 @@ if __name__ == '__main__':
           dbCKA_res[d1, d2] = linear_cka(domain1, domain2, debiasing=False)
           CCA_res[d1, d2] = canonical_correlation(domain1, domain2)[1] #Adjusted R2
         
-    
-    plot_corrs(CKA_res, list(domains.keys()), 'CKA', path)
-    plot_corrs(dbCKA_res, list(domains.keys()), 'CKA_debiased', path)
-    plot_corrs(CCA_res, list(domains.keys()), 'CCA', path)
+    if plot:
+      plot_corrs((dbCKA_res, CCA_res), list(domains.keys()), ['CKA', 'CCA'], '/home/laura.marras/Documents/Repositories/Action101/data/plots/')
 
 
     # Load task and Create Full model
@@ -112,9 +115,7 @@ if __name__ == '__main__':
     #domains['full'] = full
 
     # Initialize arrays to save all permuted results 
-    CCA_shuff_full_res = np.full((50, len(domains)), np.nan)
-    CCA_full_shuff_res = np.full((50, len(domains)), np.nan)
-    CKA_res = np.full((50, len(domains)), np.nan)
+    CCA_res = np.full((50, len(domains)), np.nan)
     dbCKA_res = np.full((50, len(domains)), np.nan)
   
     for d, domain in enumerate(list(domains.keys())):
@@ -127,21 +128,21 @@ if __name__ == '__main__':
           shuffled = np.hstack([domains[dom] if dom!=domain else domains[dom][vorder,:] for dom in domains.keys()])
           
           # Run cca 
-          CCA_shuff_full_res[vperm-1, d], _, _, _, _, _, _ = canonical_correlation(shuffled, full)
-          CCA_full_shuff_res[vperm-1, d], _, _, _, _, _, _ = canonical_correlation(full, shuffled)
+          CCA_res[vperm-1, d], _, _, _, _, _, _ = canonical_correlation(shuffled, full)
           
           # Run CKA
           dbCKA_res[vperm-1, d] = linear_cka(shuffled, full, debiasing=True)
-          CKA_res[vperm-1, d] = linear_cka(shuffled, full)
           
     # Get average R2 results across perms
-    CCA_XY_res_avg = np.mean(CCA_shuff_full_res, axis=0)
-    CCA_YX_res_avg = np.mean(CCA_full_shuff_res, axis=0)
-    CKA_res_avg = np.mean(CKA_res, axis=0)
+    CCA_res_avg = np.mean(CCA_res, axis=0)
     dbCKA_res_avg = np.mean(dbCKA_res, axis=0)
 
     labels = [dom + ' ' + str(domains[dom].shape[1]) for dom in list(domains.keys())]
 
-    barplot_corrs(np.vstack((CCA_XY_res_avg, CCA_YX_res_avg, CKA_res_avg)), labels, ['CCA shuffled vs full', 'CCA full vs shuffled', 'CKA'], path)
+    # Save results
+    np.savez(path+'full_shuffled_correlation', cca=CCA_res_avg, cka=dbCKA_res_avg)
+
+    if plot:
+      barplot_corrs(np.vstack((CCA_res_avg, dbCKA_res_avg)), labels, ['CCA', 'CKA debiased'], path)
 
     print('d')
