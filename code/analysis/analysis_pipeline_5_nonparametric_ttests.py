@@ -4,6 +4,28 @@ from scipy.stats import false_discovery_control as fdr
 from scipy.stats import wilcoxon, friedmanchisquare
 import itertools
 import pandas as pd
+from nilearn import image
+
+def create_nifti(results, ROIsmask, atlas_file, savepath):
+    
+    atlas = image.load_img('/data1/Action_teresi/CCA/atlas/Schaefer_7N_{}.nii.gz'.format(atlas_file[-3:]))
+    atlas_rois = np.unique(atlas.get_fdata()).astype(int)
+    atlas_rois = np.delete(atlas_rois, np.argwhere(atlas_rois==0))
+
+    x,y,z = atlas.get_fdata().shape
+    briks = results.shape[0]
+    
+    image_final = np.squeeze(np.zeros((x,y,z,briks)))
+
+    for r, roi in enumerate(ROIsmask):
+        x_inds, y_inds, z_inds = np.where(atlas.get_fdata()==roi)
+        
+        image_final[x_inds, y_inds, z_inds] = results[:, r]
+
+    img = image.new_img_like(atlas, image_final, affine=atlas.affine, copy_header=False)
+    img.to_filename(savepath)
+
+    return
 
 if __name__ == '__main__': 
     
@@ -15,6 +37,7 @@ if __name__ == '__main__':
     n_subs = len(sub_list)
     global_path = '/home/laura.marras/Documents/Repositories/Action101/data/' # 'C:/Users/SemperMoMiLab/Documents/Repositories/Action101/data/' #
     atlas_file = 'Schaefer200'
+    roislabels = np.loadtxt('/data1/Action_teresi/CCA/atlas/Schaefer_7N200_labels.txt', dtype=str)
 
     # Load group results
     rois_sign_AV = np.load('{}cca_results/AV/group/single_doms/CCA_R2_allsubs_singledoms.npz'.format(global_path), allow_pickle=True)['rois_list']
@@ -46,6 +69,10 @@ if __name__ == '__main__':
     friedman_qvals = fdr(friedman_pvals)
     correction_fried='_fdr'
     
+    # Save nifti
+    results = np.vstack((friedman_stats, 1-friedman_pvals, 1-friedman_qvals))
+    create_nifti(results, rois_sign, atlas_file, path+'{}_friedman.nii'.format(condition))
+
     if len(np.where(friedman_qvals<0.05)[0]) == 0:
         friedman_qvals = friedman_pvals
         print('no significant qvalues in the Friedman test, considering pvalues')
@@ -88,7 +115,8 @@ if __name__ == '__main__':
         windom_wilcox_sign = np.array([[dom_combs_str[c,comb] for c, comb in enumerate(wilcox_doms[r,:])] for r in range(wilcox_doms.shape[0])])[np.where(wilcox_qvals<0.05)]
 
         results = pd.DataFrame((rois_wilcox_sign, combs_wilcox_sign, windom_wilcox_sign)).T
-        results.to_csv('{}{}_friedman{}_wilcoxon{}.csv'.format(path, condition, correction_fried, correction_wilc), header=['rois', 'comparison', 'domain'], index=False)
+        results['roilabels'] = results[0].apply(lambda x: roislabels[x-1])
+        results.to_csv('{}{}_friedman{}_wilcoxon{}.csv'.format(path, condition, correction_fried, correction_wilc), header=['rois', 'comparison', 'domain', 'roilabels'], index=False)
 
     else:
         print('no significant pvalues in the Wilcoxon test')
