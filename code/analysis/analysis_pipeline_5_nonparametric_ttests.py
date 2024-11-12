@@ -5,6 +5,29 @@ from scipy.stats import wilcoxon, friedmanchisquare
 import itertools
 import pandas as pd
 from nilearn import image
+from scipy.stats import chi2
+
+def fisher_sum(pvals):
+    
+    """
+    Compute Fisher sum of pvalues across conditions
+    
+    Inputs:
+    - pvals : array, 4d matrix of shape = n_conds by n_rois by n_doms by n_doms, containing pvals of each domain pairing, ROI and condition
+    
+    Outputs:
+    - pval : array, 3d matrix of shape = n_rois by n_doms by n_doms, containing aggregated pvalues
+    - t : array, 3d matrix of shape = n_rois by n_doms by n_doms, containing aggregated t statistic
+    """
+    
+    # Define number of tests, in this case = n conditions
+    n_test = pvals.shape[0]
+
+    # Calculate t and pval with Fisher's formula
+    t = -2 * (np.sum(np.log(pvals), axis=0))
+    pvals_summed = 1-(chi2.cdf(t, 2*n_test))
+
+    return pvals_summed, t
 
 def create_nifti(results, ROIsmask, briks, atlas_file, savepath):
     
@@ -35,53 +58,62 @@ def wilcox_test(ranks):
     # Get number of ROIs, domains and create domains pairings
     _, n_rois, n_doms = ranks.shape
     combs = list(itertools.combinations(range(n_doms), 2))
-    n_combs = len(combs)
+
+    # Initialize res
+    wilcox_pvals_mat = np.ones((n_rois, n_doms, n_doms))
+
+    # Iterate over ROIs
+    for r in range(n_rois):
+    
+        # Iterate over domains pairings
+        for comb in combs:
+            dom1 = ranks[:, r, comb[0]]
+            dom2 = ranks[:, r, comb[1]]
+
+            # Run Wilcoxon test
+            _, pval = wilcoxon(dom1, dom2, alternative='greater')
+
+            # Assign pvalue to contrast in matrix and 1-pvalue in opposite contrast
+            wilcox_pvals_mat[r, comb[0], comb[1]] = pval
+            wilcox_pvals_mat[r, comb[1], comb[0]] = 1-pval
+
+    return wilcox_pvals_mat
+
+def maxwin(win_mat, pvals):
+
+    n_rois = win_mat.shape[0]
 
     # Initialize res
     flags = np.full(n_rois, np.nan)
     win_val = np.full(n_rois, np.nan)
-    wilcox_pvals = np.full((n_rois, n_combs), np.nan)
-    wilcox_doms = np.full((n_rois, n_combs), np.nan)
+    max_idxs = []
 
-    # Iterate over ROIs
     for r in range(n_rois):
-        win_mat = np.zeros((n_doms, n_doms))
-    
-        # Iterate over domains pairings
-        for c, comb in enumerate(combs):
-            dom1 = ranks[:, r, comb[0]]
-            dom2 = ranks[:, r, comb[1]]
+        roi_doms = win_mat[r]
+        max_dom = np.max(roi_doms)
 
-            _, pval = wilcoxon(dom1, dom2)
-            wilcox_pvals[r, c] = pval
+        if max_dom:
+            idxs = np.where(roi_doms == max_dom)[0]
+
+            if len(idxs) > 1:
+                
+                minpval = np.argmin(pvals[r])
+                max_idxs.append(list(idxs))
             
-            diff = dom1 - dom2
-
-            # Obtain direction
-            abs_differences = np.abs(diff)
-            signs = np.sign(diff)
-            ranks_diffs = np.argsort(np.argsort(abs_differences)) + 1  
-            T_plus = np.sum(ranks_diffs[signs > 0])
-            T_minus = np.sum(ranks_diffs[signs < 0])
-
-            winning_domain = 1 - (T_plus>T_minus) if T_plus != T_minus else np.nan
-            wilcox_doms[r, c] = winning_domain
-
-            if pval<0.05:
-                win_mat[comb[winning_domain], comb[1-winning_domain]] += 1
-
-        # Somma tutte le volte che un dominio ha vinto significativamente un confronto
-        maxwin_mat = np.sum(win_mat, axis=-1)
+            else:
+                max_idxs.append(idxs[0])
+        else:
+            max_idxs.append(np.nan)
 
         # Prendi il dominio che vince di più
-        flags[r] = np.argmax(maxwin_mat)+1 # Solve issue of ties (argmax takes first index in case of tie results)
+        flags[r] = np.argmax(win_mat[r])+1 # Solve issue of ties (argmax takes first index in case of tie results)
 
         # Prendi il numero di confronti vinti da quel dominio
-        win_val[r] = np.max(maxwin_mat)
+        win_val[r] = np.max(win_mat[r])
 
     flags[np.where(win_val==0)] = 0
 
-    return flags, win_val, wilcox_pvals
+    return max_idxs, flags, win_val
 
 def run_sim(n_subs, n_rois, n_doms, n_perms, alpha=0.05, seed=0):
     
@@ -168,32 +200,53 @@ def wilcox_test_old(ranks, fdr_corr=False):
 if __name__ == '__main__': 
     
     # Set parameters
-    condition = 'vid'
+    conditions = ['AV', 'vid', 'aud']
     n_perms = 1000
     simulate = False
    
     sub_lists = {'AV': np.array([12, 13, 14, 15, 16, 17, 18, 19, 22, 32]), 'vid': np.array([20, 21, 23, 24, 25, 26, 28, 29, 30, 31]), 'aud': np.array([3, 4, 5, 6, 7, 8, 9, 10, 11, 27])}
-    sub_list = sub_lists[condition]
-    n_subs = len(sub_list)
+    
     global_path = '/home/laura.marras/Documents/Repositories/Action101/data/' # 'C:/Users/SemperMoMiLab/Documents/Repositories/Action101/data/' #
     atlas_file = 'Schaefer200'
     roislabels = np.loadtxt('/data1/Action_teresi/CCA/atlas/Schaefer_7N200_labels.txt', dtype=str)
-
-    # Load group results
     rois_sign_AV = np.load('{}cca_results/AV/group/single_doms/CCA_R2_allsubs_singledoms.npz'.format(global_path), allow_pickle=True)['rois_list']
-    results_singledoms = np.load('{}cca_results/{}/group/single_doms/CCA_R2_allsubs_singledoms.npz'.format(global_path, condition), allow_pickle=True)['results_subs_sd'] #[:,rois_indx,:]
+    n_rois = rois_sign_AV.shape[0]
 
     # Load task models
     domains_list = ['space', 'movement', 'agent_objective', 'social_connectivity', 'emotion_expression', 'linguistic_predictiveness']
     domains = {d: np.loadtxt('/home/laura.marras/Documents/Repositories/Action101/data/models/domains/group_ds_conv_{}.csv'.format(d), delimiter=',', skiprows=1)[:, 1:] for d in domains_list}
     n_doms = len(domains.keys())
-    n_subs, n_rois, _ = results_singledoms.shape
 
-    # Get ranks
-    rois_ranks = np.argsort(np.argsort(results_singledoms, axis=1), axis=1)+1 # For each subject and for each domain, get ranks of R2 across ROIs
- 
-    # Run Wilcoxon
-    flags, win_val, wilcox_pvals = wilcox_test(rois_ranks)
+    wilcox_pvals = np.full((len(conditions), n_rois, n_doms, n_doms), np.nan)
+
+    # Iterate over conditions
+    for c, condition in enumerate(conditions):
+        
+        sub_list = sub_lists[condition]
+        n_subs = len(sub_list)
+
+        # Load group results
+        results_singledoms = np.load('{}cca_results/{}/group/single_doms/CCA_R2_allsubs_singledoms.npz'.format(global_path, condition), allow_pickle=True)['results_subs_sd']
+        
+        # Get ranks
+        rois_ranks = np.argsort(np.argsort(results_singledoms, axis=1), axis=1)+1 # For each subject and for each domain, get ranks of R2 across ROIs
+    
+        # Run Wilcoxon
+        wilcox_pvals[c] = wilcox_test(rois_ranks)
+        
+    # Sum pvals with fisher
+    pvals_summed, t = fisher_sum(wilcox_pvals)
+
+    # Threshold
+    alpha = 0.05    
+    pvals_tresh = 1*(pvals_summed < alpha)
+
+    # Maxwin
+    win_mat = np.sum(pvals_tresh, axis=-1)
+    pvals_win = np.sum(pvals_summed, axis=-1)
+
+    
+
 
     # Get treshold for multiple comparisons
     if simulate:
