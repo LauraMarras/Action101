@@ -7,24 +7,25 @@ import pandas as pd
 from nilearn import image
 from scipy.stats import chi2
 
-def fisher_sum(pvals):
+def fisher_sum(pvals, axis=0):
     
     """
-    Compute Fisher sum of pvalues across conditions
+    Compute Fisher sum of p values across the specified axis
     
     Inputs:
-    - pvals : array, 4d matrix of shape = n_conds by n_rois by n_doms by n_doms, containing pvals of each domain pairing, ROI and condition
+    - pvals : array, >=2d matrix containing p values
+    - axis : int, specify the axis along to which compute the aggregated p values; default = 0
     
     Outputs:
-    - pval : array, 3d matrix of shape = n_rois by n_doms by n_doms, containing aggregated pvalues
-    - t : array, 3d matrix of shape = n_rois by n_doms by n_doms, containing aggregated t statistic
+    - pvals_summed : array, >=1d matrix containing aggregated p values
+    - t : array, >=1d matrix containing aggregated t statistic
     """
     
     # Define number of tests, in this case = n conditions
-    n_test = pvals.shape[0]
+    n_test = pvals.shape[axis]
 
     # Calculate t and pval with Fisher's formula
-    t = -2 * (np.sum(np.log(pvals), axis=0))
+    t = -2 * (np.sum(np.log(pvals), axis=axis))
     pvals_summed = 1-(chi2.cdf(t, 2*n_test))
 
     return pvals_summed, t
@@ -86,7 +87,9 @@ def maxwin(win_mat, pvals):
     # Initialize res
     flags = np.full(n_rois, np.nan)
     win_val = np.full(n_rois, np.nan)
-    max_idxs = []
+    max_idxs_1f = np.full(n_rois, np.nan)
+    max_idxs_2f = []
+    n_flags = np.zeros(n_rois)
 
     for r in range(n_rois):
         roi_doms = win_mat[r]
@@ -96,14 +99,23 @@ def maxwin(win_mat, pvals):
             idxs = np.where(roi_doms == max_dom)[0]
 
             if len(idxs) > 1:
+                max_idxs_2f.append(list(idxs+1))
+
+                minpval_idx = np.argmin(pvals[r, idxs])
+                domain = idxs[minpval_idx]
+
+                n_flags[r] = len(idxs)
                 
-                minpval = np.argmin(pvals[r])
-                max_idxs.append(list(idxs))
             
             else:
-                max_idxs.append(idxs[0])
+                domain = idxs[0]
+                max_idxs_2f.append([idxs[0]+1])
+                n_flags[r] = 1
+            
+            max_idxs_1f[r] = domain +1
+        
         else:
-            max_idxs.append(np.nan)
+            max_idxs_2f.append([])
 
         # Prendi il dominio che vince di più
         flags[r] = np.argmax(win_mat[r])+1 # Solve issue of ties (argmax takes first index in case of tie results)
@@ -113,7 +125,7 @@ def maxwin(win_mat, pvals):
 
     flags[np.where(win_val==0)] = 0
 
-    return max_idxs, flags, win_val
+    return max_idxs_1f, max_idxs_2f, flags, win_val, n_flags
 
 def run_sim(n_subs, n_rois, n_doms, n_perms, alpha=0.05, seed=0):
     
@@ -125,12 +137,16 @@ def run_sim(n_subs, n_rois, n_doms, n_perms, alpha=0.05, seed=0):
 
     # Run wilcox for simulated data
     win_val_rand = np.zeros((n_perms))
+    pvals_rand = np.zeros((n_perms, n_doms, n_doms))
     
     for p in range(n_perms):
-        _, win_val_rand[p], _ = wilcox_test(rand_res_ranks[:,rand_roi,:,p])
+        pvals_rand[p] = wilcox_test(rand_res_ranks[:,rand_roi,:,p])
+    
+    
+    # Maxwin part to add 
     
     # Get threshold from null distro
-    tresh = np.percentile(win_val_rand, q=100-(alpha*100))
+    tresh = np.percentile(pvals_rand, q=100-(alpha*100))
 
     return tresh
     
@@ -202,7 +218,7 @@ if __name__ == '__main__':
     # Set parameters
     conditions = ['AV', 'vid', 'aud']
     n_perms = 1000
-    simulate = False
+    simulate = True
    
     sub_lists = {'AV': np.array([12, 13, 14, 15, 16, 17, 18, 19, 22, 32]), 'vid': np.array([20, 21, 23, 24, 25, 26, 28, 29, 30, 31]), 'aud': np.array([3, 4, 5, 6, 7, 8, 9, 10, 11, 27])}
     
@@ -238,15 +254,16 @@ if __name__ == '__main__':
     pvals_summed, t = fisher_sum(wilcox_pvals)
 
     # Threshold
-    alpha = 0.05    
+    alpha = 0.01    
     pvals_tresh = 1*(pvals_summed < alpha)
 
     # Maxwin
     win_mat = np.sum(pvals_tresh, axis=-1)
-    pvals_win = np.sum(pvals_summed, axis=-1)
+    pvals_win = np.copy(pvals_summed)
+    pvals_win[np.where(pvals_win >= alpha)] = 0
+    pvals_win_doms = np.sum(pvals_win, axis=-1)
 
-    
-
+    max_idxs_1f, max_idxs_2f, flags, win_val, n_flags = maxwin(win_mat, pvals_win_doms)
 
     # Get treshold for multiple comparisons
     if simulate:
