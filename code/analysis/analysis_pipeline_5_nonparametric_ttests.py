@@ -3,7 +3,6 @@ import numpy as np
 from scipy.stats import false_discovery_control as fdr
 from scipy.stats import wilcoxon, friedmanchisquare
 import itertools
-import pandas as pd
 from nilearn import image
 from scipy.stats import chi2
 
@@ -117,17 +116,29 @@ def maxwin(contrasts, pvals=None):
 
     return flags, n_woncontrasts.astype(int), n_flags.astype(int)
 
-def run_sim(shape, alpha=0.05, seed=0):
+def simulate_pvals(shape, seed=0, path=None):
     
-
+    """
+    Simulate random ranks, perform Wilcoxon signed-rank tests, and aggregate p-values using Fisher's method
+    
+    Inputs:
+    - shape : tuple, shape of the simulation data (n_subs, n_conds, n_rois, n_doms, n_perms)
+    - seed : int, random seed; default = 0
+    - path : str, optional file path to save the resulting p-values; default = None (i.e. don't save)
+    
+    Outputs:
+    - pvals : array, 4D matrix of shape (n_perms, n_conds, n_doms, n_doms) containing pairwise p-values from Wilcoxon signed-rank tests for each permutation and condition
+    - fisher_pvals : array, 3D matrix of aggregated p-values across conditions, computed using Fisher's method
+    """
 
     # Simulate random results
     np.random.seed(seed=seed)
     n_subs, n_conds, n_rois, n_doms, n_perms = shape
     rand_res = np.random.rand(n_conds, n_subs, n_rois, n_doms, n_perms)
     rand_res_data = np.argsort(np.argsort(rand_res, axis=2), axis=2)+1
-    rand_roi = np.random.randint(0,127)
 
+    # Simulate test on single ROI 
+    rand_roi = np.random.randint(0, n_rois)
     
     # Initialize pvals matrix
     pvals = np.full((n_perms, n_conds, n_doms, n_doms), np.nan)
@@ -140,16 +151,44 @@ def run_sim(shape, alpha=0.05, seed=0):
         
     # Sum pvals with fisher
     fisher_pvals, _ = fisher_sum(pvals, axis=1)
+
+    # Save pvals
+    if path:
+        np.savez('{}wilcox_simulation{}_pvals'.format(path, n_perms), pvals=pvals, fisher_pvals=fisher_pvals)
+
+    return pvals, fisher_pvals
+
+def threshold(pvals, n_bootstraps=127, alpha=0.05, q=95, seed=0):
     
+    """
+    Compute a statistical threshold for p-values using bootstrapping and MaxT correction
+    
+    Inputs:
+    - pvals : array, 1D array of p-values (null distribution)
+    - n_bootstraps : int, number of bootstrap samples to generate for constructing the null distribution; default = 127 (n_rois)
+    - alpha : float, significance level used for thresholding the p-values; default = 0.05
+    - q : int, percentile value to extract the threshold from the null distribution; default = 95
+
+    Outputs:
+    - tresh : float, the computed threshold derived from the null distribution of maximum statistics
+    """
+
     # Threshold
-    pvals_tresholded = 1*(fisher_pvals < alpha)
+    pvals_tresholded = 1*(pvals < alpha)
 
     # Maxwin
     contrasts = np.sum(pvals_tresholded, axis=-1)
     _, n_woncontrasts, _ = maxwin(contrasts)
 
+    # Bootstrapping
+    np.random.seed(seed=seed)
+    bootstrapped_contrasts = np.random.choice(n_woncontrasts, size=(n_bootstraps), replace=True)
+
+    # MaxT
+    max_bootstrap = np.max(bootstrapped_contrasts, axis=0)
+
     # Get threshold from null distro
-    tresh = np.percentile(n_woncontrasts, q=100-(alpha*100))
+    tresh = np.percentile(max_bootstrap, q=q)
 
     return tresh
 
@@ -192,13 +231,12 @@ def create_nifti(results, ROIsmask, atlas_file, savepath):
 
     return
 
-if __name__ == '__main__': 
+if __name__ == '__main__':
     
     # Set parameters
     conditions = ['AV', 'vid', 'aud']
-    n_perms = 1000
-    simulate = True
-    bonferroni = False
+    n_perms = 10000
+    simulate = False
    
     sub_lists = {'AV': np.array([12, 13, 14, 15, 16, 17, 18, 19, 22, 32]), 'vid': np.array([20, 21, 23, 24, 25, 26, 28, 29, 30, 31]), 'aud': np.array([3, 4, 5, 6, 7, 8, 9, 10, 11, 27])}
     
@@ -209,7 +247,7 @@ if __name__ == '__main__':
     n_rois = rois_sign_AV.shape[0]
 
     # Save path
-    path = '{}ttest_nonparam/'.format(global_path)
+    path = '{}ttest_nonparam/'.format(global_path) #'/data1/Action_teresi/CCA/contrasts/'
     if not os.path.exists(path):
         os.makedirs(path)
 
@@ -218,57 +256,61 @@ if __name__ == '__main__':
     domains = {d: np.loadtxt('/home/laura.marras/Documents/Repositories/Action101/data/models/domains/group_ds_conv_{}.csv'.format(d), delimiter=',', skiprows=1)[:, 1:] for d in domains_list}
     n_doms = len(domains.keys())
 
+    # Estimate threshold for FPR through simulation
     if simulate:
-        tresh = run_sim((10, 3, n_rois, n_doms, n_perms))
+        # Load simulated fisher pvalues if already calculated
+        try:
+            fisher_pvals_sim = np.load('{}wilcox_simulation{}_pvals.npz'.format(path, n_perms))['fisher_pvals']
+        # Else simulate them
+        except FileNotFoundError:
+            pvals_sim, fisher_pvals_sim = simulate_pvals(shape=(10, 3, n_rois, n_doms, n_perms), path=path)
     
-    # Initialize pvals matrix
-    wilcox_pvals = np.full((len(conditions), n_rois, n_doms, n_doms), np.nan)
+        tresh = threshold(fisher_pvals_sim, alpha=0.005)
 
-    # Iterate over conditions
-    for c, condition in enumerate(conditions):
-        
-        sub_list = sub_lists[condition]
-        n_subs = len(sub_list)
-
-        # Load group results
-        results_singledoms = np.load('{}cca_results/{}/group/single_doms/CCA_R2_allsubs_singledoms.npz'.format(global_path, condition), allow_pickle=True)['results_subs_sd']
-        
-        # Get ranks
-        rois_ranks = np.argsort(np.argsort(results_singledoms, axis=1), axis=1)+1 # For each subject and for each domain, get data of R2 across ROIs
+    # Load Wilcoxon fisher pvalues if already calculated
+    try:
+        fisher_qvals = np.load('{}wilcox_pvals'.format(path))['fisher_qvals']
     
-        # Run Wilcoxon
-        wilcox_pvals[c], n_tests = wilcox_test(rois_ranks)
+    # Else Calculate them
+    except FileNotFoundError:
+        # Initialize pvals matrix
+        wilcox_pvals = np.full((len(conditions), n_rois, n_doms, n_doms), np.nan)
+
+        # Iterate over conditions
+        for c, condition in enumerate(conditions):
+            
+            sub_list = sub_lists[condition]
+            n_subs = len(sub_list)
+
+            # Load group results
+            results_singledoms = np.load('{}cca_results/{}/group/single_doms/CCA_R2_allsubs_singledoms.npz'.format(global_path, condition), allow_pickle=True)['results_subs_sd']
+            
+            # Get ranks
+            rois_ranks = np.argsort(np.argsort(results_singledoms, axis=1), axis=1)+1 # For each subject and for each domain, get data of R2 across ROIs
         
-    # Sum pvals with fisher
-    fisher_pvals, t = fisher_sum(wilcox_pvals)
+            # Run Wilcoxon
+            wilcox_pvals[c], n_tests = wilcox_test(rois_ranks)
+            
+        # Sum pvals with fisher
+        fisher_pvals, t = fisher_sum(wilcox_pvals)
+
+        # Correct for multiple comparisons
+        fisher_qvals = fdr(fisher_pvals)
+
+        # Save fisher pvals and qvals
+        np.savez('{}wilcox_pvals'.format(path), fisher_pvals=fisher_pvals, fisher_qvals=fisher_qvals)
 
     # Threshold
-    for alpha in [0.05, 1e-2, 1e-3, 1e-4, 1e-5, 1e-6]:
-        if bonferroni:
-            alpha = alpha/n_tests
-        
-        pvals_tresholded = 1*(fisher_pvals < alpha)
+    alpha = 0.05
+    pvals_tresholded = 1*(fisher_qvals < alpha)
 
-        # Maxwin
-        contrasts = np.sum(pvals_tresholded, axis=-1)
-        flags, n_woncontrasts, n_flags = maxwin(contrasts)
+    # Maxwin
+    contrasts = np.sum(pvals_tresholded, axis=-1)
+    flags, n_woncontrasts, n_flags = maxwin(contrasts)
 
-        # Create nifti for each domain
-        domains_ncontrasts = np.full((n_rois, n_doms), np.nan)
+    # Create nifti for each domain
+    domains_ncontrasts = np.full((n_rois, n_doms), np.nan)
+    for domain in range(n_doms):
+        domains_ncontrasts[:, domain] = np.array([n_woncontrasts[r] if np.isin(domain+1, doms) else 0 for r, doms in enumerate(flags)])
 
-        for domain in range(n_doms):
-            domains_ncontrasts[:, domain] = np.array([n_woncontrasts[r] if np.isin(domain+1, doms) else 0 for r, doms in enumerate(flags)])
-           
-        # Threshold
-        
-        # Create Nifti
-        create_nifti(domains_ncontrasts, rois_sign_AV, atlas_file, '{}wilcoxon_{}.nii'.format(path, str(alpha)))
-
-
-    # # Sum significant pvalues for each ROI and domain
-    # pvals_win = np.copy(fisher_pvals)
-    # pvals_win[np.where(pvals_win >= alpha)] = 0
-    # pvals_win_doms = np.sum(pvals_win, axis=-1)
-
-    # # Select single flag based in lowest summed p values
-    # flags_pval, _, _ = maxwin(contrasts, pvals_win_doms)
+    create_nifti(domains_ncontrasts, rois_sign_AV, atlas_file, '{}wilcoxon_q{}.nii'.format(path, str(alpha)))
