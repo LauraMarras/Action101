@@ -1,10 +1,8 @@
 import os
 import numpy as np
-from scipy.stats import false_discovery_control as fdr
-from scipy.stats import wilcoxon, friedmanchisquare
 import itertools
+from scipy.stats import false_discovery_control, wilcoxon, chi2
 from nilearn import image
-from scipy.stats import chi2
 
 def fisher_sum(pvals, axis=0):
     
@@ -237,6 +235,7 @@ if __name__ == '__main__':
     conditions = ['AV', 'vid', 'aud']
     n_perms = 10000
     simulate = False
+    create_nifti_ranks = True
    
     sub_lists = {'AV': np.array([12, 13, 14, 15, 16, 17, 18, 19, 22, 32]), 'vid': np.array([20, 21, 23, 24, 25, 26, 28, 29, 30, 31]), 'aud': np.array([3, 4, 5, 6, 7, 8, 9, 10, 11, 27])}
     
@@ -250,6 +249,20 @@ if __name__ == '__main__':
     path = '{}ttest_nonparam/'.format(global_path) #'/data1/Action_teresi/CCA/contrasts/'
     if not os.path.exists(path):
         os.makedirs(path)
+
+    # Create nifti of group ranks for each domain and condition
+    if create_nifti_ranks:
+        
+        for c, condition in enumerate(conditions):
+            
+            # Get ranks of group results
+            results_singledoms = np.load('{}cca_results/{}/group/single_doms/CCA_R2_allsubs_singledoms.npz'.format(global_path, condition), allow_pickle=True)['results_subs_sd']
+            
+            results_group = np.mean(results_singledoms, axis=0)
+            ranks_avg = np.argsort(np.argsort(results_group, axis=0), axis=0)+1
+
+            # Save nifti
+            create_nifti(ranks_avg, rois_sign_AV, atlas_file, '{}avg_ranks_{}.nii'.format(path, condition))
 
     # Load task models
     domains_list = ['space', 'movement', 'agent_objective', 'social_connectivity', 'emotion_expression', 'linguistic_predictiveness']
@@ -284,10 +297,10 @@ if __name__ == '__main__':
 
             # Load group results
             results_singledoms = np.load('{}cca_results/{}/group/single_doms/CCA_R2_allsubs_singledoms.npz'.format(global_path, condition), allow_pickle=True)['results_subs_sd']
-            
+
             # Get ranks
             rois_ranks = np.argsort(np.argsort(results_singledoms, axis=1), axis=1)+1 # For each subject and for each domain, get data of R2 across ROIs
-        
+
             # Run Wilcoxon
             wilcox_pvals[c], n_tests = wilcox_test(rois_ranks)
             
@@ -295,7 +308,7 @@ if __name__ == '__main__':
         fisher_pvals, t = fisher_sum(wilcox_pvals)
 
         # Correct for multiple comparisons
-        fisher_qvals = fdr(fisher_pvals)
+        fisher_qvals = false_discovery_control(fisher_pvals)
 
         # Save fisher pvals and qvals
         np.savez('{}wilcox_pvals'.format(path), fisher_pvals=fisher_pvals, fisher_qvals=fisher_qvals)
