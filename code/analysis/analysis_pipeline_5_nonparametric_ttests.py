@@ -1,7 +1,7 @@
 import os
 import numpy as np
 import itertools
-from scipy.stats import false_discovery_control, wilcoxon, chi2
+from scipy.stats import false_discovery_control, wilcoxon, ranksums, chi2
 from nilearn import image
 
 def fisher_sum(pvals, axis=0):
@@ -27,7 +27,7 @@ def fisher_sum(pvals, axis=0):
 
     return pvals_summed, t
 
-def wilcox_test(data):
+def wilcox_test(data, paired=True):
 
     """
     Compute pairwise Wilcoxon signed-rank tests between domains for each ROI
@@ -60,9 +60,12 @@ def wilcox_test(data):
             domB_data = data[:, r, domB]
 
             # Run Wilcoxon test
-            _, pvals[r, domA, domB] = wilcoxon(domA_data, domB_data, alternative='greater')
-            _, pvals[r, domB, domA] = wilcoxon(domB_data, domA_data, alternative='greater')
-
+            if paired:
+                _, pvals[r, domA, domB] = wilcoxon(domA_data, domB_data, alternative='greater')
+                _, pvals[r, domB, domA] = wilcoxon(domB_data, domA_data, alternative='greater')
+            else:
+                _, pvals[r, domA, domB] = ranksums(domA_data, domB_data, alternative='greater')
+                _, pvals[r, domB, domA] = ranksums(domB_data, domA_data, alternative='greater')
     return pvals, n_tests
 
 def maxwin(contrasts, pvals=None):
@@ -224,7 +227,7 @@ def create_nifti(results, ROIsmask, atlas_file, savepath):
         image_final[x_inds, y_inds, z_inds] = results[r]
     
     # Create nifti and save
-    img = image.new_img_like(atlas, image_final, affine=atlas.affine, copy_header=False)
+    img = image.new_img_like(atlas, image_final, affine=atlas.affine, copy_header=True)
     img.to_filename(savepath)
 
     return
@@ -236,6 +239,8 @@ if __name__ == '__main__':
     n_perms = 10000
     simulate = False
     create_nifti_ranks = True
+    paired = True 
+    test = 'wilcox' if paired else 'ranksum'
    
     sub_lists = {'AV': np.array([12, 13, 14, 15, 16, 17, 18, 19, 22, 32]), 'vid': np.array([20, 21, 23, 24, 25, 26, 28, 29, 30, 31]), 'aud': np.array([3, 4, 5, 6, 7, 8, 9, 10, 11, 27])}
     
@@ -282,7 +287,7 @@ if __name__ == '__main__':
 
     # Load Wilcoxon fisher pvalues if already calculated
     try:
-        fisher_qvals = np.load('{}wilcox_pvals'.format(path))['fisher_qvals']
+        fisher_qvals = np.load('{}{}_pvals.npz'.format(path, test))['fisher_qvals']
     
     # Else Calculate them
     except FileNotFoundError:
@@ -302,7 +307,7 @@ if __name__ == '__main__':
             rois_ranks = np.argsort(np.argsort(results_singledoms, axis=1), axis=1)+1 # For each subject and for each domain, get data of R2 across ROIs
 
             # Run Wilcoxon
-            wilcox_pvals[c], n_tests = wilcox_test(rois_ranks)
+            wilcox_pvals[c], n_tests = wilcox_test(rois_ranks, paired)
             
         # Sum pvals with fisher
         fisher_pvals, t = fisher_sum(wilcox_pvals)
@@ -311,7 +316,7 @@ if __name__ == '__main__':
         fisher_qvals = false_discovery_control(fisher_pvals)
 
         # Save fisher pvals and qvals
-        np.savez('{}wilcox_pvals'.format(path), fisher_pvals=fisher_pvals, fisher_qvals=fisher_qvals)
+        np.savez('{}{}_pvals'.format(path, test), fisher_pvals=fisher_pvals, fisher_qvals=fisher_qvals)
 
     # Threshold
     alpha = 0.05
@@ -326,4 +331,4 @@ if __name__ == '__main__':
     for domain in range(n_doms):
         domains_ncontrasts[:, domain] = np.array([n_woncontrasts[r] if np.isin(domain+1, doms) else 0 for r, doms in enumerate(flags)])
 
-    create_nifti(domains_ncontrasts, rois_sign_AV, atlas_file, '{}wilcoxon_q{}.nii'.format(path, str(alpha)))
+    create_nifti(domains_ncontrasts, rois_sign_AV, atlas_file, '{}{}_q{}.nii'.format(path, test, str(alpha)))
