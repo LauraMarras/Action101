@@ -4,8 +4,9 @@ from utils.similarity_measures import canonical_correlation, linear_cka
 from utils.permutation_schema_func import permutation_schema
 import matplotlib.pyplot as plt
 import seaborn as sns
+from utils.PalColormapImporter import read_pal_file, create_colormap_from_hex
 
-def plot_corrs(results, domains, measure, path):
+def plot_corrs_subplot(results, domains, measure, path):
    
     # Plot
     fig, axs = plt.subplots(1,2, figsize=(20, 7.5))
@@ -22,6 +23,38 @@ def plot_corrs(results, domains, measure, path):
 
     # Save
     plt.savefig(path + 'domains_corr_CKA_CCA.png')
+
+def plot_corrs(results, domains, measure, path, pal_file_path=None, width=7.48, height=10.63):
+
+    # Convert afni palette to pyplot cmap
+    if pal_file_path:
+      hex_colors = read_pal_file(pal_file_path)[1:128] # Select only red to blue part
+      hex_colors.reverse()
+      cmap = create_colormap_from_hex(hex_colors)
+    
+    else:
+       cmap = 'rocket_r'
+    
+    # Define Fig size relative to slidesize in inches
+    inchsize_size = tuple(np.array([width, height]))
+    fig = plt.figure(figsize=inchsize_size, dpi=300)
+
+    # Plot
+    sns.heatmap(results, vmin=0, vmax=1, square=True, annot=True,
+                  cmap=cmap, cbar_kws=dict(pad=0.01, shrink=0.6, label=measure), 
+                  annot_kws={"size":7, "font":'arial'})
+
+    # Labels and layout
+    ax = plt.gca()
+    ax.set_xticklabels(labels=domains, rotation=45, ha='right', rotation_mode='anchor')
+    ax.set_yticklabels(labels=domains, rotation=0)
+
+    plt.tight_layout(pad=0.3)
+
+    # Save
+    plt.savefig('{}{}_between_domains.png'.format(path, measure))
+
+
 
 def barplot_corrs(results, domains, measures_names, path):
    
@@ -55,6 +88,23 @@ def barplot_corrs(results, domains, measures_names, path):
     # Save
     plt.savefig(path + 'similarity_fullvsshuffledmodels.png')
 
+def config_plt(textsize=8):
+
+    plt.rc('font', family='Arial')
+    plt.rc('axes', titlesize=12)
+    plt.rc('axes', labelsize=textsize)
+    plt.rc('xtick', labelsize=textsize-1)
+    plt.rc('ytick', labelsize=textsize-1)
+
+    plt.rc('legend', fontsize=textsize-1)
+    plt.rc('legend', loc='best')
+    plt.rc('legend', frameon=False)
+
+    plt.rc('grid', linewidth=0.5)
+    plt.rc('axes', linewidth=0.5)
+    plt.rc('xtick.major', width=0.5)
+    plt.rc('ytick.major', width=0.5)
+
 if __name__ == '__main__':
     plot=True
     path = '/home/laura.marras/Documents/Repositories/Action101/data/models/'
@@ -73,25 +123,12 @@ if __name__ == '__main__':
                   'main_effector_7', 'main_effector_8', 'main_effector_9', 'main_effector_10', 'target_0','target_1', 'agent_H_NH', 'tool_mediated', 'transitivity', 'touch_2', 'sociality', 'touch_1', 'target_2', 'target_3', 'multi_ag_vs_jointact_1', 'multi_ag_vs_jointact_2', 'ToM', 'people_present',
                   'EBL', 'EIA', 'gesticolare', 'simbolic_gestures','durativity', 'telicity', 'iterativity', 'dinamicity']
     }
-    
-    domains_notOHE = {
-      'space': ['context', 'inter_scale'], 
-      'movement': ['main_effector', 'eff_visibility'], 
-      'agent_objective': ['target', 'agent_H_NH', 'tool_mediated', 'transitivity', 'touch'], 
-      'social_connectivity': ['sociality', 'target', 'touch', 'multi_ag_vs_jointact', 'ToM', 'people_present'], 
-      'emotion_expression': ['EBL', 'EIA', 'gesticolare', 'simbolic_gestures'], 
-      'linguistic_predictiveness': ['durativity', 'telicity', 'iterativity', 'dinamicity'], 
-      'full': ['sociality', 'target', 'touch', 'multi_ag_vs_jointact', 'ToM', 'people_present', 'durativity', 'telicity', 'iterativity', 'dinamicity', 'EBL', 'EIA', 'gesticolare', 'simbolic_gestures', 'agent_H_NH', 'tool_mediated', 'transitivity', 'context', 'inter_scale', 'main_effector', 'eff_visibility']
-      }
-    
-    
+   
     # Load single tagger tagging
     model_group = pd.read_csv(path + 'group_conv_ds.csv', sep=',')
         
     # Init results
-    CKA_res = np.zeros((len(domains), len(domains)))
     dbCKA_res = np.zeros((len(domains), len(domains)))
-    CCA_res = np.zeros((len(domains), len(domains)))
     
     for d1, dom1 in enumerate(domains.keys()):
         domain1 = model_group[domains[dom1]].to_numpy()
@@ -99,12 +136,21 @@ if __name__ == '__main__':
         for d2, dom2 in enumerate(domains.keys()):
           domain2 = model_group[domains[dom2]].to_numpy()
         
-          CKA_res[d1, d2] = linear_cka(domain1, domain2, debiasing=True)
           dbCKA_res[d1, d2] = linear_cka(domain1, domain2, debiasing=False)
-          CCA_res[d1, d2] = canonical_correlation(domain1, domain2)[1] #Adjusted R2
         
+    # Save
+    dbCKA_df = pd.DataFrame(dbCKA_res, columns=domains.keys(), index=domains.keys())
+    dbCKA_df.to_csv(path + 'domains/dbCKA_btw_domains.csv')
+    
     if plot:
-      plot_corrs((dbCKA_res, CCA_res), list(domains.keys()), ['CKA', 'CCA'], '/home/laura.marras/Documents/Repositories/Action101/data/plots/')
+      config_plt()
+      domains_labels = ['space', 'effector', 'agent-object', 'social', 'emotion', 'linguistic', 'full']
+      plot_path = '/home/laura.marras/Documents/Repositories/Action101/data/plots_final/'
+      palette = '/data1/Action_teresi/CCA/code/reds_and_blues.pal'
+      
+      # Round results to second decimal
+      res2plot = np.round(dbCKA_res, 2)
+      plot_corrs(res2plot, domains_labels, 'CKA', plot_path, palette, width=7.48/3, height=10.63/4)
 
 
     # Load task and Create Full model
