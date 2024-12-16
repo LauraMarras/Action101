@@ -169,6 +169,8 @@ def convolve_HRF(model_df, tr=2, hrf_p=8.6, hrf_q=0.547, dur=12):
 if __name__ == '__main__':
     
     # Define domains
+    upsample = False
+
     domains = {}
     domains['conceptual_1'] = {
     'space_movement': ['context_0', 'context_1', 'context_2', 'inter_scale',  'eff_visibility',
@@ -222,13 +224,14 @@ if __name__ == '__main__':
     group_model[group_model>1] = 1
 
     # Upsample to 0.05sec time resolution
-    group_upsampled = group_model
-    group_upsampled['timedelta'] = pd.TimedeltaIndex(np.arange(group_model.shape[0])/10, unit='S')
-    group_upsampled = group_upsampled.set_index('timedelta')
-    group_upsampled = group_upsampled.resample('0.05S').interpolate(method='nearest')
-    group_upsampled.reset_index(drop=True, inplace=True)
-    group_upsampled.loc[len(group_upsampled)] = 0
-    group_model.drop('timedelta', axis=1, inplace=True)
+    if upsample:
+        group_upsampled = group_model
+        group_upsampled['timedelta'] = pd.TimedeltaIndex(np.arange(group_model.shape[0])/10, unit='S')
+        group_upsampled = group_upsampled.set_index('timedelta')
+        group_upsampled = group_upsampled.resample('0.05S').interpolate(method='nearest')
+        group_upsampled.reset_index(drop=True, inplace=True)
+        group_upsampled.loc[len(group_upsampled)] = 0
+        group_model.drop('timedelta', axis=1, inplace=True)
 
     # Downsample to resolution 2sec
     group_downsampled = downsample(group_model, 2, 'binary')
@@ -238,26 +241,27 @@ if __name__ == '__main__':
 
     # Convolve with HRF
     group_conv_ds = convolve_HRF(group_downsampled, tr=2, hrf_p=8.6, hrf_q=0.547, dur=12)
-    group_conv_us = convolve_HRF(group_upsampled, tr=0.05, hrf_p=8.6, hrf_q=0.547, dur=12)
+    df_AI_conv_ds = convolve_HRF(df_AI_ds, tr=2, hrf_p=8.6, hrf_q=0.547, dur=12)
+    df_LM_conv_ds = convolve_HRF(df_LM_ds, tr=2, hrf_p=8.6, hrf_q=0.547, dur=12)
+    df_LT_conv_ds = convolve_HRF(df_LT_ds, tr=2, hrf_p=8.6, hrf_q=0.547, dur=12)
 
     # Create domain matrices and save csv
-    out_path = '/home/laura.marras/Documents/Repositories/Action101/data/models/domains/'
-    domains_us_bin = get_domain_mat(group_upsampled, domains['conceptual_1'], out_path, 'group_us_binary')
-    domains_ds_bin = get_domain_mat(group_downsampled, domains['conceptual_1'], out_path, 'group_ds_binary')
-    domains_us_conv = get_domain_mat(group_conv_us, domains['conceptual_1'], out_path, 'group_us_conv')
-    domains_ds_conv = get_domain_mat(group_conv_ds, domains['conceptual_2'], out_path, 'group_ds_conv')
+    out_path = '/home/laura.marras/Documents/Repositories/Action101/data/models/'
+    if upsample:
+        domains_us_bin = get_domain_mat(group_upsampled, domains['conceptual_2'], out_path+'domains/', 'group_us_binary')
+        group_upsampled.to_csv(out_path + 'group_bin_us.csv', sep=',', index_label=False)
+    domains_ds_bin = get_domain_mat(group_downsampled, domains['conceptual_2'], out_path+'domains/', 'group_ds_binary')
+    domains_ds_conv = get_domain_mat(group_conv_ds, domains['conceptual_2'], out_path+'domains/', 'group_ds_conv')
 
     # Save all dframes
-    out_path = '/home/laura.marras/Documents/Repositories/Action101/data/models/group_'
-    group_conv_ds.to_csv(out_path + 'conv_ds.csv', sep=',', index_label=False)
-    group_conv_us.to_csv(out_path + 'conv_us.csv', sep=',', index_label=False)
-    group_upsampled.to_csv(out_path + 'bin_us.csv', sep=',', index_label=False)
-    group_downsampled.to_csv(out_path + 'bin_ds.csv', sep=',', index_label=False)
+    group_conv_ds.to_csv(out_path + 'group_conv_ds.csv', sep=',', index_label=False)
+    group_downsampled.to_csv(out_path + 'group_bin_ds.csv', sep=',', index_label=False)
 
-    out_path = '/home/laura.marras/Documents/Repositories/Action101/data/models/'
-    df_AI_ds.to_csv(out_path + 'AI_ds.csv', sep=',', index_label=False)
-    df_LM_ds.to_csv(out_path + 'LM_ds.csv', sep=',', index_label=False)
-    df_LT_ds.to_csv(out_path + 'LT_ds.csv', sep=',', index_label=False)
-
+    df_AI_ds.to_csv(out_path + 'AI_bin_ds.csv', sep=',', index_label=False)
+    df_LM_ds.to_csv(out_path + 'LM_bin_ds.csv', sep=',', index_label=False)
+    df_LT_ds.to_csv(out_path + 'LT_bin_ds.csv', sep=',', index_label=False)
+    df_AI_conv_ds.to_csv(out_path + 'AI_conv_ds.csv', sep=',', index_label=False)
+    df_LM_conv_ds.to_csv(out_path + 'LM_conv_ds.csv', sep=',', index_label=False)
+    df_LT_conv_ds.to_csv(out_path + 'LT_conv_ds.csv', sep=',', index_label=False)
 
     print('d')
