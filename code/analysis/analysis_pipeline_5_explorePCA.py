@@ -37,6 +37,7 @@ if __name__ == '__main__':
     # Initialize matrix to store results for each condition
     exp_var_conds = np.full((n_subs, n_rois, n_conds), np.nan)
     n_voxels_conds = np.full((n_subs, n_rois, n_conds), np.nan)
+    r2 = np.full((n_rois, n_conds), np.nan)
 
     # Set figure and axes
     config_plt()
@@ -51,6 +52,9 @@ if __name__ == '__main__':
     
         rois_to_include = list(np.loadtxt('{}cca_results/AV/group/fullmodel/significantROIs_AV.txt'.format(global_path)).astype(int)) if condition != 'AV' else [*range(1,201)]
         n_rois = len(rois_to_include)
+
+        # Load R2
+        r2[np.array(rois_to_include)-1,c] = np.squeeze(np.load('{}cca_results/{}/group/fullmodel/CCA_R2_pvals_maxT_group_Schaefer200.npz'.format(global_path, condition))['results_group'])
 
         # Load data
         try:
@@ -149,19 +153,22 @@ if __name__ == '__main__':
     expvar_min = np.nanmin(exp_var_conds, axis=(0,2))
     nvox_min = np.nanmin(n_voxels_conds, axis=(0,2))
 
-    fig, ax = plt.subplots(1, 1, dpi=300, figsize=(8.3, 2.5))
-    colors = np.full((len(expvar)), '#ff4d6d')
-    colors[np.array(rois_to_include)-1] = '#a4133c'
-    
-    # Plot explained variance
-    idxs = np.argsort(nvox)[::-1]
-    idx_rev = np.array([i for i in range(200) if i+1 not in rois_to_include])
-    rois_rev = [i for i in range(1,200) if i not in rois_to_include]
+    r2_avg = np.nanmean(r2, axis=-1)
+    r2_max = np.nanmax(r2, axis=1)
+    r2_min = np.nanmin(r2, axis=1)
 
-    ax.plot(rois_to_include_order, expvar[idxs], linewidth=0.3, marker='.', markersize=3, color='#1f77b4', label='explained variance')
-    ax.plot(rois_rev, expvar[idxs[idx_rev]], color='#8fbbda', linestyle='', marker=".", markersize=3)
+    fig, axs = plt.subplots(2, 1, dpi=300, figsize=(8.3, 5), sharex=True)
+
+    # Plot explained variance
+    x = np.arange(1, 201)
+    ax = axs[0]
+    idxs = np.argsort(nvox)[::-1]
+    idxs2exclude = np.where(np.isnan(r2[idxs,-1]))[0]
+
+    ax.plot(x, expvar[idxs], linewidth=0.3, marker='.', markersize=3, color='#1f77b4', label='explained variance')
+    ax.plot(x[idxs2exclude], expvar[idxs][idxs2exclude], color='#8fbbda', linestyle='', marker=".", markersize=3)
     
-    ax.fill_between(rois_to_include_order, expvar_min[idxs], expvar_max[idxs], alpha=0.3, color='#8fbbda', edgecolor=None)
+    ax.fill_between(x, expvar_min[idxs], expvar_max[idxs], alpha=0.3, color='#8fbbda', edgecolor=None)
 
     ax.set_ylabel('Explained variance')
     ax.set_ylim([0.65,1])
@@ -170,10 +177,47 @@ if __name__ == '__main__':
 
     # Add axis and plot n_voxels
     ax2 = ax.twinx()
-    ax2.plot(rois_to_include_order, nvox[idxs], linewidth=0.3, marker='.', markersize=3, color='#720026', label='number of voxels')
-    ax2.plot(rois_rev, nvox[idxs[idx_rev]], color='#ce4257', linestyle='', marker=".", markersize=3)
+    ax2.plot(x, nvox[idxs], linewidth=0.3, marker='.', markersize=3, color='#720026', label='number of voxels')
+    ax2.plot(x[idxs2exclude], nvox[idxs][idxs2exclude], color='#ce4257', linestyle='', marker=".", markersize=3)
     
-    ax2.fill_between(rois_to_include_order, nvox_min[idxs], nvox_max[idxs], alpha=0.3, color='#ce4257', edgecolor=None)
+    ax2.fill_between(x, nvox_min[idxs], nvox_max[idxs], alpha=0.3, color='#ce4257', edgecolor=None)
+
+    ax2.set_ylabel('Number of voxels')
+    ax2.set_ylim([0, 500])
+    ax2.spines['top'].set_visible(False)
+    ax2.margins(x=0)
+    
+    # Plot horizontal line indicating min number of voxels
+    ax2.axhline(38, color='#4f000b', ls='--', linewidth=0.5)
+
+    # Add x axis ticks and labels
+    #ax.set_xlabel('ROIs')
+    ax.set_xticks(ticks=[])#rois_to_include_order, labels=roislabels[idxs], rotation=90, size=3)
+  
+    # Add legend
+    lines, labels = ax.get_legend_handles_labels()
+    lines2, labels2 = ax2.get_legend_handles_labels()
+    ax.legend(lines + lines2, labels + labels2, loc='right', frameon=False)
+
+    # Plot R2
+    ax= axs[1]
+    
+    ax.plot(x, r2_avg[idxs], linewidth=0.3, marker='.', markersize=3, color='#226f54', label='R2')
+    ax.plot(x[idxs2exclude], r2_avg[idxs][idxs2exclude], color='#87c38f', linestyle='', marker=".", markersize=3)
+    
+    ax.fill_between(x, r2_min[idxs], r2_max[idxs], alpha=0.3, color='#87c38f', edgecolor=None)
+
+    ax.set_ylabel('R2')
+    ax.set_ylim([0, 0.1])
+    ax.spines['top'].set_visible(False)
+    ax.margins(x=0)
+
+    # Add axis and plot n_voxels
+    ax2 = ax.twinx()
+    ax2.plot(x, nvox[idxs], linewidth=0.3, marker='.', markersize=3, color='#720026', label='number of voxels')
+    ax2.plot(x[idxs2exclude], nvox[idxs][idxs2exclude], color='#ce4257', linestyle='', marker=".", markersize=3)
+    
+    ax2.fill_between(x, nvox_min[idxs], nvox_max[idxs], alpha=0.3, color='#ce4257', edgecolor=None)
 
     ax2.set_ylabel('Number of voxels')
     ax2.set_ylim([0, 500])
@@ -185,12 +229,12 @@ if __name__ == '__main__':
 
     # Add x axis ticks and labels
     ax.set_xlabel('ROIs')
-    ax.set_xticks(ticks=rois_to_include_order, labels=roislabels[idxs], rotation=90, size=3)
+    ax.set_xticks(ticks=[])#, labels=roislabels[idxs], rotation=90, size=3)
   
     # Add legend
     lines, labels = ax.get_legend_handles_labels()
     lines2, labels2 = ax2.get_legend_handles_labels()
-    ax.legend(lines + lines2, labels + labels2, loc='right', frameon=False)
+    ax.legend(lines + lines2, labels + labels2, loc='upper right', frameon=False)
 
     plt.tight_layout()
-    plt.savefig('{}pca/plots/explainedvariance_mean.png'.format(global_path))
+    plt.savefig('{}plots/explainedvariance_R2_mean.png'.format(global_path))
