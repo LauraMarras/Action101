@@ -23,7 +23,7 @@ def config_plt(textsize=8):
     plt.rc('xtick.major', width=0.5)
     plt.rc('ytick.major', width=0.5)
 
-def plot_corrs_means(results, results2, res_std, res2_std, domains, measure, path):
+def plot_corrs_means(results, results2, res_std, res2_std, domains, fname, path):
    
     # Parameters
     n_domains = results.shape[0]
@@ -32,21 +32,16 @@ def plot_corrs_means(results, results2, res_std, res2_std, domains, measure, pat
     x = np.arange(n_domains)
 
     # Plot
-    inchsize_size = tuple(np.array([21/3, 29.7/4])*0.393701)
-
-    # Dimensioni totali della figura
-    fig_width = 4.986666666666667 / 2 # Larghezza totale della figura
-    fig_height = 3  #2.67 Altezza totale della figura
-    fig, ax = plt.subplots(figsize=(fig_width, fig_height), dpi=300) #(2.5, 3.5)
-    #colors = ['#058c42', '#ec4d37', '#6f2dbd']
+    fig_width = 4.986666666666667 / 2 
+    fig_height = 3 
+    fig, ax = plt.subplots(figsize=(fig_width, fig_height), dpi=300)
     colors = ['#548ba8','#719e49','#e75e5d', '#e79c3c', '#866596', '#77452d', '#0d1b2a']
 
     ax.bar(x, results, bar_width, color=colors, alpha=0.85, yerr=res_std)
     ax.bar(x, results2, bar_width, color=colors, hatch='////', edgecolor='black', yerr=res2_std, error_kw=dict(elinewidth=0.5))
 
     # Labels and layout
-    #ax.set_xlabel('Domains')
-    ax.set_ylabel('{}'.format(measure))
+    ax.set_ylabel('Inter-rater agreement (CKA)')
     ax.set_xticks(x)
     ax.set_xticklabels(domains, rotation=45, ha='right', rotation_mode='anchor')
     ax.set_ylim(0,1)
@@ -60,16 +55,18 @@ def plot_corrs_means(results, results2, res_std, res2_std, domains, measure, pat
     ax.legend(handles=solid_patches, loc='upper right', ncol=1, handlelength=1, labelspacing=0, handletextpad=0.3, columnspacing=0.4)
 
     # Save
-    plt.savefig(path + '{}.png'.format(measure.replace(' ', '_')))
+    plt.savefig(path + '{}.png'.format(fname))
 
 if __name__ == '__main__':
 
     path = '/home/laura.marras/Documents/Repositories/Action101/data/models/inter_raters_agreement/'
-    plot = False
+    plot = True
+    debiasing = True
+    convolved = False
     
     # Load CKA results
     try:
-        res = np.load('{}inter_rater_dbCKA_permut.npy'.format(path))
+        res = np.load('{}inter_rater_CKA{}_{}_permut.npy'.format(path, '_db' if debiasing else '', 'conv' if convolved else 'bin'))
     
     except FileNotFoundError:
         
@@ -108,7 +105,7 @@ if __name__ == '__main__':
         } # 'action_present':               'action_present'
         
         # Load single tagger tagging
-        tagging_dict = {r: pd.read_csv(path + '{}_ds.csv'.format(r), sep=',') for r in raters}
+        tagging_dict = {r: pd.read_csv(path + '{}_{}_ds.csv'.format(r, 'conv' if convolved else 'bin'), sep=',') for r in raters}
         
         # Create perm schema
         max_cols = np.max([len(v) for v in domains.values()])
@@ -130,9 +127,9 @@ if __name__ == '__main__':
                     t1 = tagging_dict[pair[0]][domains[dom]].to_numpy()
                     t2 = tagging_dict[pair[1]][domains[dom]].to_numpy()
                     
-                    res[pr, d, p] = linear_cka(t1, t2[order, :], debiasing=True)
+                    res[pr, d, p] = linear_cka(t1, t2[order, :], debiasing=debiasing)
 
-        np.save('{}inter_rater_dbCKA_permut.npy'.format(path), res)
+        np.save('{}inter_rater_CKA{}_{}_permut.npy'.format(path, '_db' if debiasing else '', 'conv' if convolved else 'bin'), res)
     
     # Get null distribution 99th percentile
     res_null = np.percentile(res[:, :, 1:], q=99, axis=-1)
@@ -148,5 +145,5 @@ if __name__ == '__main__':
     if plot:
         config_plt()
         domains_labels = ['space', 'effector', 'agent-object', 'social', 'emotion', 'linguistic', 'full']
-        plot_path = '/home/laura.marras/Documents/Repositories/Action101/data/plots_final/'
-        plot_corrs_means(res_mean, res_null_mean, res_std, res_null_std, domains_labels, 'Inter-rater agreement (CKA)', plot_path)
+        fname = 'inter_rater_CKA{}_{}'.format('_db' if debiasing else '', 'conv' if convolved else 'bin')
+        plot_corrs_means(res_mean, res_null_mean, res_std, res_null_std, domains_labels, fname, path)
