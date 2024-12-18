@@ -11,6 +11,7 @@ from itertools import product
 from matplotlib import pyplot as plt
 import seaborn as sns
 from sklearn.cross_decomposition import CCA
+from utils.similarity_measures import canonical_correlation
 
 def canoncorrelation(X,Y, center=True, adjust=True):
     
@@ -131,6 +132,7 @@ def domains_collinearity(domains, path, measure='R2'):
    
     # Create domains dictionary
     domains_dict = {d: pd.read_csv(path + '{}.csv'.format(d)).to_numpy() for d in domains}
+    n_doms = len(domains)
     
     # Run cca for each pair of domains and save r2     
     domains_combs = list(product(domains, repeat=2)) # get all pairs of domains
@@ -141,11 +143,11 @@ def domains_collinearity(domains, path, measure='R2'):
         Y = domains_dict[comb[1]]
         
         if measure == 'R2' or measure == 'r2':
-            r_mat[c] = canoncorrelation(X, Y)[0]
+            r_mat[c] = canonical_correlation(X, Y)[1]
         elif measure == 'RV' or measure == 'rv':
             r_mat[c] = rv_coeff(X, Y)
             
-    r_mat = r_mat.reshape(5,5).T # Reshape into a n_domain by n_domain matrix
+    r_mat = r_mat.reshape(n_doms, n_doms).T # Reshape into a n_domain by n_domain matrix
     
     return r_mat
 
@@ -169,7 +171,7 @@ def plot_canoncorr(R, labels, out_path=False, filename='R2', cbar_lab='R2'):
     fig = plt.figure(figsize = (n_dom, n_dom))
     
     # Plot heatmap
-    sns.heatmap(R, cmap='coolwarm', annot=True, vmin= -1, vmax=1, linewidths=1,  cbar_kws={'label': cbar_lab})
+    sns.heatmap(R, cmap='rocket_r', annot=True, vmin= 0, vmax=1, cbar_kws={'label': cbar_lab})
     
     # Set axis and ticks labels
     ax = plt.gca()
@@ -280,13 +282,13 @@ def plot_sparsity(R, labels, out_path=False, filename='Sparsity'):
 if __name__ == '__main__':
     
     # Set data_path as the path where the csv files containing single domain matrices are saved, including first part of filename, up to the domain specification (here I specify 'tagging_carica101_group_2su3_convolved_' for example)
-    data_path = 'C:/Users/laura/OneDrive/Documenti/PhD/ProgettoLorenzo/Data_Code/Data/Carica101_Models/Domains/tagging_carica101_group_2su3_convolved_'
+    data_path = '/home/laura.marras/Documents/Repositories/Action101/data/models/domains/group_ds_conv_'
     
     # Set out_path as the path where to save results figures
-    out_path = 'C:/Users/laura/OneDrive/Documenti/PhD/ProgettoLorenzo/Data_Code/Results/Collinearity/New/'
+    out_path = '/home/laura.marras/Documents/Repositories/Action101/data/plots/'
     
     # Specify domain names in list
-    domains_list = ['space_movement', 'agent_objective', 'social_connectivity', 'emotion_expression', 'linguistic_predictiveness']
+    domains_list = ['space', 'movement', 'agent_objective', 'social_connectivity', 'emotion_expression', 'linguistic_predictiveness']
 
     # Get R2 and RV
     
@@ -297,7 +299,7 @@ if __name__ == '__main__':
     sparmat = domains_sparsity(domains_list, data_path)
 
     # Plot
-    plot_canoncorr(R2, domains_list, out_path, filename='R2_profilingtrial')
-    plot_canoncorr(RV, domains_list, out_path, filename='RV_profilingtrial', cbar_lab= 'RV')
-    plot_sparsity(sparmat, domains_list, out_path, filename= 'sparsity_profilingtrial')
+    plot_canoncorr(R2, domains_list, out_path, filename='domains_collinearity_R2')
+    plot_canoncorr(RV, domains_list, out_path, filename='domains_collinearity_RV', cbar_lab= 'RV')
+    plot_sparsity(sparmat, domains_list, out_path, filename= 'domains_sparsity')
     
