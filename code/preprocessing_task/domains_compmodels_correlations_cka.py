@@ -1,79 +1,53 @@
 import numpy as np
 import pandas as pd
-from utils.similarity_measures import canonical_correlation, linear_cka, cka, gram_linear, feature_space_linear_cka
-import matplotlib.pyplot as plt
-import seaborn as sns
+from utils.similarity_measures import linear_cka
 
 if __name__ == '__main__':
     
-    # Load domains
-    domains_list = ['space', 'movement', 'agent_objective', 'social_connectivity', 'emotion_expression', 'linguistic_predictiveness']
-    domains = {d: np.loadtxt('/home/laura.marras/Documents/Repositories/Action101/data/models/domains/group_ds_conv_{}.csv'.format(d), delimiter=',', skiprows=1)[:, 1:] for d in domains_list}
-    full_model = {'full_model': np.hstack([domains[d] for d in domains_list])}
-    full = full_model['full_model']
-    domains['full'] = full
+    # Define parameters
+    path = '/home/laura.marras/Documents/Repositories/Action101/data/models/'
+    debiasing = True
+    convolved = False
 
-    # Load computational models
-    models_path = '/home/laura.marras/Documents/Repositories/Action101/data/models/comp_models/'
+    domains = {
+    'space': ['context_0', 'context_1', 'context_2', 'inter_scale'],
+    'movement': ['eff_visibility', 'main_effector_0', 'main_effector_1', 'main_effector_2', 
+                'main_effector_3', 'main_effector_4', 'main_effector_5', 'main_effector_6',
+                  'main_effector_7', 'main_effector_8', 'main_effector_9', 'main_effector_10'],
+    'agent_objective': ['target_0','target_1', 'agent_H_NH', 'tool_mediated', 'transitivity', 'touch_2'],
+    'social_connectivity': ['sociality', 'touch_1', 'target_2', 'target_3', 'multi_ag_vs_jointact_1', 'multi_ag_vs_jointact_2', 'ToM', 'people_present'],
+    'emotion_expression': ['EBL', 'EIA', 'gesticolare', 'simbolic_gestures'],
+    'linguistic_predictiveness': ['durativity', 'telicity', 'iterativity', 'dinamicity'],
+    'full': ['context_0', 'context_1', 'context_2', 'inter_scale', 'eff_visibility', 'main_effector_0', 'main_effector_1', 'main_effector_2', 
+                'main_effector_3', 'main_effector_4', 'main_effector_5', 'main_effector_6',
+                  'main_effector_7', 'main_effector_8', 'main_effector_9', 'main_effector_10', 'target_0','target_1', 'agent_H_NH', 'tool_mediated', 'transitivity', 'touch_2', 'sociality', 'touch_1', 'target_2', 'target_3', 'multi_ag_vs_jointact_1', 'multi_ag_vs_jointact_2', 'ToM', 'people_present',
+                  'EBL', 'EIA', 'gesticolare', 'simbolic_gestures','durativity', 'telicity', 'iterativity', 'dinamicity']
+    }
+
     models = ['motion', 'gpt4', 'power', 'relu6', 'relu5-1'] #'relu3-1'
 
+    # Load CKA results
     try:
-        # Load the results
-        dbcka_df = pd.read_csv(models_path + 'cka_domains.csv', index_col=0)
+        CKA_df = pd.read_csv('{}comp_models/CKA{}_doms{}_compmodels.csv'.format(path, '_db' if debiasing else '', '_conv' if convolved else '_bin'), index_col=0)
 
     except FileNotFoundError:
-        # Initialize res matrices
-        dbcka_res = np.empty((len(models), len(domains)))
+        
+        # Load group model
+        model_group = pd.read_csv('{}group_{}_ds.csv'.format(path, 'conv' if convolved else 'bin'), sep=',')
+
+        # Initialize results matrix
+        CKA_res = np.empty((len(models), len(domains)))
 
         for m, model in enumerate(models):
             try:
-                X = np.loadtxt('{}{}_task-movie_allruns.tsv'.format(models_path, model))
+                X = np.loadtxt('{}comp_models/{}_task-movie_allruns.tsv'.format(path, model))
             except:
-                X = np.loadtxt('{}{}_task-movie_allruns.tsv.gz'.format(models_path, model))
+                X = np.loadtxt('{}comp_models/{}_task-movie_allruns.tsv.gz'.format(path, model))
         
             for d, dom in enumerate(domains.keys()):
-                Y = domains[dom]
-                dbcka_res[m,d] = linear_cka(X, Y, debiasing=True)
+                Y = model_group[domains[dom]].to_numpy()
+                CKA_res[m,d] = linear_cka(X, Y, debiasing=debiasing)
 
         # Save results
-        dbcka_df = pd.DataFrame(dbcka_res, columns=domains.keys(), index=models)
-        dbcka_df.to_csv(models_path + 'cka_domains.csv')
-
-    # Plot
-    dbcka_melted = dbcka_df.reset_index().melt(id_vars='index', var_name='Domain', value_name='Similarity')
-    dbcka_melted.rename(columns={'index': 'Model'}, inplace=True)
-
-    plt.figure(figsize=(12, 6))
-    sns.barplot(data=dbcka_melted, x='Domain', y='Similarity', hue='Model', palette='tab10')
-
-    # Set title, labels, axes and legend
-    plt.title('CKA similarity between computational models and domains')
-    plt.xlabel('Domain')
-    plt.ylabel('CKA debiased')
-    plt.ylim(0,0.4)
-    plt.legend(title='Model', loc='upper right', frameon=False)  #bbox_to_anchor=(1.05, 1),
-    plt.xticks(rotation=45)
-    plt.tight_layout()
-
-    ax = plt.gca()
-    ax.spines['right'].set_visible(False)
-    ax.spines['top'].set_visible(False)
-
-    # Save
-    plt.savefig(models_path + 'cka.png')
-
-    # Set up the heatmap plot
-    plt.figure(figsize=(10, 8))
-    sns.heatmap(dbcka_df, annot=True, fmt=".2f", cmap='rocket_r', cbar_kws={'label': 'CKA Similarity'})
-
-    # Customize the plot
-    plt.title('CKA Similarity between Computational Models and Domains')
-    plt.xlabel('Domain')
-    plt.ylabel('Model')
-    plt.xticks(rotation=45)
-    plt.yticks(rotation=0)
-    
-    plt.tight_layout()
-
-    # Save the plot
-    plt.savefig(models_path + 'cka_heatmap.png')
+        CKA_df = pd.DataFrame(CKA_res, columns=domains.keys(), index=models)
+        CKA_df.to_csv('{}comp_models/CKA{}_doms{}_compmodels.csv'.format(path, '_db' if debiasing else '', '_conv' if convolved else '_bin'))

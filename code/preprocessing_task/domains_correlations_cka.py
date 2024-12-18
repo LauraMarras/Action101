@@ -6,7 +6,9 @@ if __name__ == '__main__':
     
     # Define parameters
     path = '/home/laura.marras/Documents/Repositories/Action101/data/models/'
-    debiasing = True  
+    debiasing = True
+    convolved = False
+    
     domains = {
     'space': ['context_0', 'context_1', 'context_2', 'inter_scale'],
     'movement': ['eff_visibility', 'main_effector_0', 'main_effector_1', 'main_effector_2', 
@@ -24,14 +26,14 @@ if __name__ == '__main__':
 
     # Load CKA results
     try:
-        CKA_df = pd.read_csv('{}domains/CKA{}_btw_domains.csv'.format(path,  '_db' if debiasing else ''))
+        CKA_df = pd.read_csv('{}domains/CKA{}_btw_domains{}.csv'.format(path, '_db' if debiasing else '', '_conv' if convolved else '_bin'))
     
     except FileNotFoundError:
         
         # Load group model
-        model_group = pd.read_csv('{}group_conv_ds.csv'.format(path), sep=',')
+        model_group = pd.read_csv('{}group_{}_ds.csv'.format(path, 'conv' if convolved else 'bin'), sep=',')
           
-        # Init results
+        # Initialize results matrix
         CKA_res = np.zeros((len(domains), len(domains)))
 
         for d1, dom1 in enumerate(domains.keys()):
@@ -44,4 +46,4 @@ if __name__ == '__main__':
           
         # Save
         CKA_df = pd.DataFrame(CKA_res, columns=domains.keys(), index=domains.keys())
-        CKA_df.to_csv('{}domains/CKA{}_btw_domains.csv'.format(path, '_db' if debiasing else ''))
+        CKA_df.to_csv('{}domains/CKA{}_btw_domains{}.csv'.format(path, '_db' if debiasing else '', '_conv' if convolved else '_bin'))
