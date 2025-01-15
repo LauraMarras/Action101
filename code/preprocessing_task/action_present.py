@@ -91,7 +91,7 @@ if __name__ == '__main__':
     pairings = list(combinations(raters, 2))
 
     # Load single tagger action_present column
-    ap_dict = {r: pd.read_csv(path + '{}_ds.csv'.format(r), sep=',')['action_present'].to_numpy() for r in raters}
+    ap_dict = {r: pd.read_csv(path + '{}_bin_ds.csv'.format(r), sep=',')['action_present'].to_numpy() for r in raters}
     
     # Initialize results matrix
     dice_res = np.full((len(pairings)), np.nan)
