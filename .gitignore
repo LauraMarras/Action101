@@ -13,7 +13,7 @@
 /simul
 /code/preprocessing_task/utils/__pycache__
 /code/other
-/code/analysis/
-/code/preprocessing_task/
+/code/analysis
+/code/preprocessing_task
 /code/fMRI_pipeline/__pycache__
 /code/action_model_pipeline/__pycache__
