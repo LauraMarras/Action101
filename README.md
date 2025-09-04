@@ -39,6 +39,7 @@ ORCID: [0000-0001-5677-8434](https://orcid.org/0000-0001-5677-8434)
 
 ## Citation
 
-If you use this repository, please cite the following paper:
+If you use this repository, please cite the following paper:\
+Marras, L., Teresi, L., Simonelli, F., Setti, F., Ingenito, A., Handjaras, G., & Ricciardi, E. (2025). Neural representation of action features across sensory modalities: a multimodal fMRI study. NeuroImage, 121439.
 
 ---
